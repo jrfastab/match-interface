@@ -49,6 +49,7 @@
 
 #define FM_MAIN_SWITCH         0
 #define FM_DEFAULT_VLAN 1
+#define MATCH_DEEP_INSPECTION_PROFILE 5
 
 fm_semaphore seqSem;
 fm_int sw = FM_MAIN_SWITCH;
@@ -741,6 +742,48 @@ static void eventHandler(fm_int event, fm_int sw, void *ptr)
 		printf("packet received\n");
 		break;
 	}
+}
+
+static int configure_deep_inspection(void)
+{
+	int err;
+	fm_parserDiCfg dip;
+	fm_parserDiCfg dip_expect = {
+		.index = MATCH_DEEP_INSPECTION_PROFILE,
+		.parserDiCfgFields = {
+			.enable = 1,
+			.protocol = 0x11, /* UDP */
+			.l4Port = 4789, /* VXLAN */
+			.l4Compare = 1,
+			.wordOffset = 0x76543210,
+		},
+	};
+
+	/* read existing deep inspection configuration */
+	memset(&dip, 0, sizeof(dip));
+	dip.index = MATCH_DEEP_INSPECTION_PROFILE;
+
+	err = fmGetSwitchAttribute(sw, FM_SWITCH_PARSER_DI_CFG, &dip);
+	if (err != FM_OK) {
+		fprintf(stderr, "Error: get deep inspection parser\n");
+		return cleanup("fmGetSwitchAttribute", err);
+	}
+
+	if (!memcmp(&dip, &dip_expect, sizeof(dip)))
+		/* parser is configured as expected */
+		return 0;
+	else if (dip.parserDiCfgFields.enable)
+		/* parser is configured, but not as expected */
+		return -EEXIST;
+
+	/* parser needs to be configured */
+	err = fmSetSwitchAttribute(sw, FM_SWITCH_PARSER_DI_CFG, &dip_expect);
+	if (err != FM_OK) {
+		fprintf(stderr, "Error: deep inspection parser\n");
+		return cleanup("fmSetSwitchAttribute", err);
+	}
+
+	return 0;
 }
 
 int switch_init(int one_vlan)
@@ -1641,6 +1684,23 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 			}
 
 			break;
+		case HEADER_INSTANCE_VXLAN:
+			switch(matches[i].field) {
+			case HEADER_VXLAN_VNI:
+				if (configure_deep_inspection()) {
+					fprintf(stderr, "deep inspection\n");
+					err = -EINVAL;
+					break;
+				}
+				condition |= FM_FLOW_MATCH_L4_DEEP_INSPECTION;
+				break;
+			default:
+				fprintf(stderr, "match error in HEADER_VXLAN, field=%d\n", matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
 		default:
 			fprintf(stderr, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
 			err = -EINVAL;
@@ -2020,6 +2080,44 @@ done:
 }
 #endif /* VXLAN_MCAST */
 
+static int
+set_vni_cond(__u32 vni, __u32 mask,
+             fm_flowCondition *cond, fm_flowValue *condVal)
+{
+	fm_byte L4DeepInspection[FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES];
+	fm_byte L4DeepInspectionMask[FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES];
+	static const int vni_bits = 24;
+	static const int vni_offset = 4;
+
+	if (!cond || !condVal)
+		return -EINVAL;
+
+	/* VNI can only be 24 bits long */
+	if ((vni > (1 << vni_bits) - 1) || (mask > (1 << vni_bits) - 1))
+		return -ERANGE;
+
+	memset(L4DeepInspection, 0x0, sizeof(L4DeepInspection));
+	memset(L4DeepInspectionMask, 0x0, sizeof(L4DeepInspectionMask));
+
+	/* VNI appears 8 bytes into the VXLAN header */
+	L4DeepInspection[vni_offset + 0] = ((__u8 *)&vni)[2];
+	L4DeepInspection[vni_offset + 1] = ((__u8 *)&vni)[1];
+	L4DeepInspection[vni_offset + 2] = ((__u8 *)&vni)[0];
+
+	L4DeepInspectionMask[vni_offset + 0] = ((__u8 *)&mask)[2];
+	L4DeepInspectionMask[vni_offset + 1] = ((__u8 *)&mask)[1];
+	L4DeepInspectionMask[vni_offset + 2] = ((__u8 *)&mask)[0];
+
+	*cond |= FM_FLOW_MATCH_L4_DEEP_INSPECTION;
+
+	memcpy(condVal->L4DeepInspection, L4DeepInspection,
+	       FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES);
+	memcpy(condVal->L4DeepInspectionMask, L4DeepInspectionMask,
+	       FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES);
+
+	return 0;
+}
+
 int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, struct net_mat_field_ref *matches, struct net_mat_action *actions)
 {
 	int i;
@@ -2028,6 +2126,8 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 	fm_flowValue condVal;
 	fm_flowAction act = 0;
 	fm_flowParam param;
+	__u32 vni;
+	__u32 vni_mask;
 	__u32 group_id;
 #ifdef VXLAN_MCAST
 	struct my_mcast_listener mcast_listeners[MAX_LISTENERS_PER_GROUP];
@@ -2177,6 +2277,24 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				break;
 			}
 
+			break;
+		case HEADER_INSTANCE_VXLAN:
+			switch(matches[i].field) {
+			case HEADER_VXLAN_VNI:
+				vni = matches[i].v.u32.value_u32;
+				vni_mask = matches[i].v.u32.mask_u32;
+
+				err = set_vni_cond(vni, vni_mask, &cond, &condVal);
+
+#ifdef DEBUG
+				printf("%s: match VNI/MASK (%u/0x%x)\n",
+				       __func__, vni, vni_mask);
+#endif
+				break;
+			default:
+				fprintf(stderr, "match error in HEADER_INSTANCE_VXLAN, field=%d\n", matches[i].field);
+				err = -EINVAL;
+			}
 			break;
 		default:
 			fprintf(stderr, "%s: match error unsupported instance %d\n", __func__, matches[i].instance);
