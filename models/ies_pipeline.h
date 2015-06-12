@@ -986,6 +986,11 @@ static struct net_mat_field_ref matches_tcam[] = {
 	  .field = HEADER_UDP_DST_PORT,
 	  .mask_type = NET_MAT_MASK_TYPE_MASK},
 
+	{ .instance = HEADER_INSTANCE_VXLAN,
+	  .header = HEADER_VXLAN,
+	  .field = HEADER_VXLAN_VNI,
+	  .mask_type = NET_MAT_MASK_TYPE_MASK},
+
 	{ .instance = 0, .field = 0},
 };
 
