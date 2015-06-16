@@ -1,0 +1,68 @@
+.\" Header and footer
+.TH "MATCH\-GET_RULES" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-get_rules \- Display rules in a table
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch get_rules\fR \-f <family> \-p <pid> [\-g] [\-h] [\-i ifname]
+               table <table> [min <min>] [max <max>]
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Display a range of rules in a table.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MATCH daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the MATCH daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+table <table>
+.RS 4
+The table id from which to get the rules.
+.RE
+
+.br
+min <min>
+.RS 4
+The minimum rule id in a range of rule ids.
+.RE
+
+.br
+max <max>
+.RS 4
+The maximum rule id in a range of rule ids.
+.RE

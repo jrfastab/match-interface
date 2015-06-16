@@ -1,0 +1,13 @@
+# For client applications that wish to add rules through an agent.
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: match-interface
+Description: Match Action Table Configuration and Headers
+Version: @MATCH_INTERFACE_VERSION@
+Requires: libgvc
+Libs: -L${libdir} -lmatch
+Cflags: -I${includedir}
+

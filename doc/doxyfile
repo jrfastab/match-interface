@@ -1,0 +1,7 @@
+PROJECT_NAME           = Match Action Tables Configuration and Headers
+INPUT                  = libs/src/backend.c \
+                         libs/include/backend.h
+OUTPUT_DIRECTORY       = doc/build
+OPTIMIZE_OUTPUT_FOR_C  = YES
+COMPACT_LATEX          = YES
+ALPHABETICAL_INDEX     = NO

@@ -1,0 +1,43 @@
+.\" Header and footer
+.TH "MATCHD" "1" "" "MATCH Daemon" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+matchd \- Process netlink MATCH commands
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatchd\fR \-f <family> [\-b <backend>] [-h] [-l] [-s]
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Matchd is a userspace daemon that listens for MATCH commands to query the state of match action tables, create and destroy match action tables, and to add and delete rules from said tables.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MATCH daemon.
+.RE
+
+.br
+\-b <backend>
+.RS 4
+The name of the backend to use.
+.RE
+
+.br
+\-l <ifname>
+.RS 4
+List available backends and exit.
+.RE
+
+.br
+\-s
+.RS 4
+Add all switch ports to a single default vlan.
+.RE

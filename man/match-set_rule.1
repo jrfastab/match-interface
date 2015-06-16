@@ -1,0 +1,110 @@
+.\" Header and footer
+.TH "MATCH\-SET_RULE" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-set_rule \- Set a new rule in a table
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch set_rule\fR \-f <family> \-p <pid> [\-g] [\-h] [\-i ifname]
+              prio <prio> handle <handle> table <table>
+              match <MATCH> [match <MATCH>...]
+              action <ACTION> [ACTION_ARG...]
+              [action <ACTION> [ACTION_ARG...]...]
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Send a command instructing a MATCH daemon to insert a rule into a match action table.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MATCH daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the match daemon (e.g. `pidof lt-matchd`).
+.RE
+ 
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+prio <prio>
+.RS 4
+The priority of the new rule (0 is lowest).
+.RE
+
+.br
+handle <handle>
+.RS 4
+The id of the new rule.
+.RE
+
+.br
+table <table>
+.RS 4
+The table id in which to add the rule.
+.RE
+
+.br
+match <MATCH>
+.RS 4
+One or more criteria for the rule to match.
+.br
+The specified matches must be supported by the table.
+.sp
+A match is defined as follows.
+.RS 2
+MATCH           : HEADER_INSTANCE.FIELD MATCH_VALUE MASK_VALUE
+.br
+HEADER_INSTANCE : string (e.g. ethernet)
+.br
+FIELD           : string (e.g. dst_mac)
+.br
+MATCH_VALUE     : the value to match
+.br
+MASK_VALUE      : the mask to use against the match value
+.br
+.RE
+For example: match ethernet.dst_mac 00:01:02:03:04:05 ff:ff:ff:ff:ff:ff
+.RE
+
+.br
+action <ACTION> [ACTION_ARG...]
+.RS 4
+One or more actions to apply to matching rules.
+.br
+The specified actions must be supported by the table.
+.sp
+An action is defined as follows.
+.RS 2
+ACTION      : ACTION_NAME [ACTION_ARG...]
+ACTION_NAME : string (e.g. set_egress_port)
+ACTION_ARG  : action argument
+.RE
+For example: action set_egress_port 5
+.RE

@@ -1,0 +1,2948 @@
+/*******************************************************************************
+  Implementation of the IES (Intel Ethernet Switch) backend
+  Author: Hao Zheng <hao.zheng@intel.com>
+  Copyright (c) <2015>, Intel Corporation
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+    * Neither the name of Intel Corporation nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE
+  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*******************************************************************************/
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <limits.h>
+#include <inttypes.h>
+#include <time.h>
+#include <arpa/inet.h>
+#include <linux/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
+#include "fm_sdk.h"
+#include "fm_sdk_fm10000_int.h"
+
+#include "models/ies_pipeline.h" /* Pipeline model */
+#include "ieslib.h"
+#include "matchlib.h"
+#include "backend.h"
+
+#define FM_MAIN_SWITCH         0
+#define FM_DEFAULT_VLAN 1
+
+fm_semaphore seqSem;
+fm_int sw = FM_MAIN_SWITCH;
+
+static int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function);
+static struct my_ecmp_group ecmp_group[TABLE_NEXTHOP_SIZE];
+static int l2mp_group[TABLE_L2_MP_SIZE];
+static __u32 dummy_nh_ipaddr = 0x01010000;
+#ifdef VXLAN_MCAST
+static int match_mcast_group[MATCH_TABLE_SIZE];
+#endif /* VXLAN_MCAST */
+
+static int ies_pipeline_open(void *arg)
+{
+	struct switch_args *conf = (struct switch_args *)arg;
+	int err = 0;
+	int i;
+
+	if (!conf->disable_switch_init) {
+		err = switch_init(conf->single_vlan);
+		if (err) {
+			fprintf(stderr, "switch_init() failed (%d)\n", err);
+			return err;
+		}
+	}
+
+	if (!conf->disable_switch_router_init) {
+		err = switch_router_init(IES_ROUTER_MAC, 1, 0, 1, 1, 0);
+		if (err) {
+			fprintf(stderr, "switch_router_init() failed (%d)\n", err);
+			return err;
+		}
+	}
+
+	for (i = 0; i < 2; i++) {
+		fm_fm10000TeDGlort teDGlort;
+		fm_fm10000TeTrapCfg teTrapCfg;
+
+		if (conf->disable_switch_tunnel_engine_a_init && i == 0)
+			continue;
+		if (conf->disable_switch_tunnel_engine_b_init && i == 1)
+			continue;
+
+		err = switch_configure_tunnel_engine(i,
+						     IES_ROUTER_MAC,
+						     IES_ROUTER_MAC,
+						     4789, 4789);
+		if (err) {
+			fprintf(stderr, "switch_configure_tunnel_engine(%i) failed (%d)\n", i, err);
+			return err;
+		}
+
+		err = fm10000GetTeDGlort(sw, i, 0, &teDGlort, false);
+		if (err) {
+			fprintf(stderr, "GetTeDglort(%i) failed (%d)\n",
+				i, err);
+			return err;
+		}
+
+		teDGlort.setSGlort = true;
+		err = fm10000SetTeDGlort(sw, i, 0, &teDGlort, false);
+		if (err) {
+			fprintf(stderr, "SetTeDglort(%i) failed (%d)\n",
+				i, err);
+			return err;
+		}
+
+		err = fm10000GetTeTrap(sw, 0, &teTrapCfg, false);
+		if (err) {
+			fprintf(stderr, "GetTeTrap(%i) failed (%d)\n", i, err);
+			return err;
+		}
+		teTrapCfg.trapGlort = 0;
+		teTrapCfg.noFlowMatch = FM_FM10000_TE_TRAP_DGLORT0;
+		err = fm10000SetTeTrap(sw, 0, &teTrapCfg,
+				       FM10000_TE_TRAP_BASE_DGLORT | FM10000_TE_TRAP_NO_FLOW_MATCH, false);
+		if (err) {
+			fprintf(stderr, "SetTeTrap(%i) failed (%d)\n", i, err);
+			return err;
+		}
+		printf("tunnel_engine(%i) is configured\n", i);
+	}
+
+	printf("switch is ready for accepting commands..\n");
+
+	return 0;
+}
+
+static void ies_pipeline_close(void)
+{
+	switch_close();
+}
+
+static void ies_pipeline_get_rule_counters(struct net_mat_rule *rule)
+{
+	__u32 switch_table_id;
+	int err;
+	int i;
+
+	/* make sure this rule specified the count action */
+	for (i = 0; rule->actions[i].uid; ++i)
+		if (rule->actions[i].uid == ACTION_COUNT)
+			break;
+
+	if (rule->actions[i].uid == 0)
+		return;
+
+	switch_table_id = rule->table_id - TABLE_DYN_START + 1;
+	err = switch_get_rule_counters(rule->hw_ruleid, switch_table_id,
+				       &rule->packets, &rule->bytes);
+	if (err)
+		fprintf(stderr, "switch_get_rule_counters error (%d)\n", err);
+}
+
+static int ies_pipeline_del_rules(struct net_mat_rule *rule)
+{
+	unsigned char mac[6];
+	__u64 mac_address = 0x0;
+	int vlan_id = FM_DEFAULT_VLAN;
+	__u32 switch_table_id = rule->table_id - TABLE_DYN_START + 1;
+	int err = -EINVAL; /* Setting default to be EINVAL, change as needed*/
+	struct net_mat_tbl *tbl, *src;
+	int i;
+	struct net_mat_field_ref *match;
+
+	if (!rule->table_id) {
+		fprintf(stderr, "%s: No table_id in del_rule cmd\n", __func__);
+		goto done;
+	}
+
+	switch (rule->table_id) {
+	case TABLE_TCAM:
+		fprintf(stderr, "%s: direct rule programing to TABLE_TCAM"
+				" is not supported\n", __func__);
+		goto done;
+		break;
+#if 0
+	case TABLE_ECMP_GROUP:
+		fprintf(stderr, "%s: rule programing to TABLE_ECMP_GROUP "
+				"is not supported\n", __func__);
+		err = -EINVAL;
+		break;
+	case TABLE_FORWARD_GROUP:
+		fprintf(stderr, "%s: rule programing to TABLE_FORWARD_GROUP "
+				"is not supported\n", __func__);
+		err = -EINVAL;
+		break;
+#endif
+	case TABLE_NEXTHOP:
+		err = switch_del_nh_entry(rule->matches, rule->actions);
+		break;
+	case TABLE_MAC:
+		for (i = 0; rule->matches[i].instance; i++) {
+			match = &rule->matches[i];
+			switch (match->instance) {
+			case HEADER_INSTANCE_ETHERNET:
+				mac_address = match->v.u64.value_u64;
+				memcpy(mac,
+				(unsigned  char *)&match->v.u64.value_u64, 6);
+				break;
+			case HEADER_INSTANCE_VLAN_OUTER:
+				if (match->field != HEADER_VLAN_VID)
+					goto done;
+
+				vlan_id = match->v.u16.value_u16;
+				break;
+			default:
+				goto done;
+			}
+		}
+
+#ifdef DEBUG
+		printf("%s: deleting mac entry vlan %d"
+			" mac %02x:%02x:%02x:%02x:%02x:%02x\n",
+			__func__, vlan_id, mac[0], mac[1], mac[2], mac[3],
+			mac[4], mac[5]);
+#endif /* DEBUG */
+
+		err = switch_del_mac_entry(vlan_id, mac_address);
+		break;
+	case TABLE_L2_MP:
+		err =  switch_del_L2MP_rule_entry(rule->matches);
+		break;
+	default:
+		tbl = get_tables(rule->table_id);
+		if (NULL == tbl) {
+			err = -EINVAL;
+			fprintf(stderr, "%s: unknown table %i\n",
+				__func__, rule->table_id);
+			goto done;
+		}
+
+		src = get_tables(tbl->source);
+		if (!src) {
+			err = -EINVAL;
+			fprintf(stderr, "%s: unknown table source %i\n",
+                                __func__, tbl->source);
+			goto done;
+		}
+		switch_table_id = rule->table_id - TABLE_DYN_START + 1;
+		if (src->uid == TABLE_TCAM)
+			err =  switch_del_TCAM_rule_entry(rule->hw_ruleid,
+							  switch_table_id);
+		else if ((src->uid == TABLE_TUNNEL_ENGINE_A) ||
+			   (src->uid == TABLE_TUNNEL_ENGINE_B)) {
+			err =  switch_del_TE_rule_entry(rule->hw_ruleid,
+							  switch_table_id);
+		} else {
+			err = -EINVAL;
+			fprintf(stderr, "%s: table %i has unknown source %d\n",
+				__func__, rule->table_id, src->uid);
+			goto done;
+		}
+		break;
+	}
+	/* In +ve scenario, err code will be updated automatically*/
+done:
+	return err;
+}
+
+static int ies_pipeline_set_rules(struct net_mat_rule *rule)
+{
+	struct net_mat_field_ref *match;
+	struct net_mat_action *action;
+	__u32 switch_table_id;
+	int err = -EINVAL; /* Setting default to be EINVAL, change as needed*/
+	struct net_mat_tbl *tbl, *src;
+
+	if (!rule->table_id) {
+		fprintf(stderr, "%s: No table_id in set_rule cmd\n", __func__);
+		goto done;
+	}
+
+	match = &rule->matches[0];
+	action = &rule->actions[0];
+
+	if (!match) {
+		fprintf(stderr, "%s: nop match abort\n", __func__);
+		goto done;
+	}
+
+	if (!action) {
+		fprintf(stderr, "%s: nop action abort\n", __func__);
+		goto done;
+	}
+
+	switch (rule->table_id) {
+	case TABLE_TCAM:
+		fprintf(stderr, "%s: direct rule programing to"
+			" TABLE_TCAM is not supported\n", __func__);
+		goto done;
+		break;
+	case TABLE_TUNNEL_ENGINE_A:
+	case TABLE_TUNNEL_ENGINE_B:
+		fprintf(stderr, "%s: direct rule programing to"
+			" TABLE_TUNNEL_ENGINE_A or B is not supported\n", __func__);
+		goto done;
+		break;
+	case TABLE_NEXTHOP:
+		err = switch_add_nh_entry(rule->matches, rule->actions);
+		break;
+	case TABLE_MAC:
+		err = switch_add_mac_entry(rule->matches, rule->actions);
+		break;
+	case TABLE_L2_MP:
+		err = switch_add_L2MP_rule_entry(rule->matches, rule->actions);
+		break;
+	default:
+		tbl = get_tables(rule->table_id);
+		if (NULL == tbl) {
+			err = -EINVAL;
+			fprintf(stderr, "%s: unknown table %i\n",
+				__func__, rule->table_id);
+			goto done;
+		}
+
+		src = get_tables(tbl->source);
+		if (!src) {
+			err = -EINVAL;
+			fprintf(stderr, "%s: unknown table source %i\n",
+                                __func__, tbl->source);
+			goto done;
+		}
+		switch_table_id = rule->table_id - TABLE_DYN_START + 1;
+		if (src->uid == TABLE_TCAM)
+			err = switch_add_TCAM_rule_entry(&(rule->hw_ruleid),
+							 switch_table_id,
+							 rule->priority,
+							 rule->matches,
+							 rule->actions);
+		else if ((src->uid == TABLE_TUNNEL_ENGINE_A) ||
+			   (src->uid == TABLE_TUNNEL_ENGINE_B)) {
+			err = switch_add_TE_rule_entry(&(rule->hw_ruleid),
+							 switch_table_id,
+							 rule->priority,
+							 rule->matches,
+							 rule->actions);
+		} else {
+			err = -EINVAL;
+			fprintf(stderr, "%s: table %i has unknown source %d\n",
+				__func__, rule->table_id, src->uid);
+			goto done;
+		}
+		break;
+	}
+	/* In +ve scenario, err code will be updated automatically*/
+done:
+	return err;
+}
+
+static int ies_pipeline_create_table(struct net_mat_tbl *tbl)
+{
+	__u32 switch_table_id;
+	int err = -EINVAL;
+
+	switch_table_id = tbl->uid - TABLE_DYN_START + 1;
+	if (switch_table_id >= FM_FLOW_MAX_TABLE_TYPE) {
+		fprintf(stderr, "Error: Table ID must be between %u and %u, inclusive\n",
+		        TABLE_DYN_START,
+		        TABLE_DYN_START + FM_FLOW_MAX_TABLE_TYPE - 2);
+		return err;
+	}
+
+	if (tbl->source == TABLE_TCAM) {
+		err = switch_create_TCAM_table(switch_table_id,
+					       tbl->matches, tbl->actions,
+					       tbl->size, 1);
+	} else if (tbl->source == TABLE_TUNNEL_ENGINE_A ||
+		   tbl->source == TABLE_TUNNEL_ENGINE_B) {
+		int te = (tbl->source == TABLE_TUNNEL_ENGINE_A) ? 0 : 1;
+
+		err = switch_create_TE_table(te, switch_table_id,
+					     tbl->matches, tbl->actions,
+					     tbl->size, 1);
+	}
+
+	return err;
+}
+
+static int ies_pipeline_destroy_table(struct net_mat_tbl *tbl)
+{
+	__u32 switch_table_id;
+	int err = -EINVAL;
+
+	switch_table_id = tbl->uid - TABLE_DYN_START + 1;
+
+	if (tbl->source == TABLE_TCAM)
+		err = switch_del_TCAM_table(switch_table_id);
+	else if (tbl->source == TABLE_TUNNEL_ENGINE_A ||
+		 tbl->source == TABLE_TUNNEL_ENGINE_B) {
+		err = switch_del_TE_table(switch_table_id);
+	}
+
+	return err;
+}
+
+static int ies_pipeline_update_table(struct net_mat_tbl *tbl)
+{
+	fm_fm10000TeTrapCfg teTrapCfg;
+	bool have_dflt_port = false;
+	int i, te, err = -EINVAL;
+	__u16 dflt_port = 0;
+	__u64 smac, dmac;
+
+	if (!tbl->attribs)
+		return -EINVAL;
+
+	smac = values_tunnel_engine[IES_VXLAN_SRC_MAC].value.u64;
+	dmac = values_tunnel_engine[IES_VXLAN_DST_MAC].value.u64;
+
+	for (i = 0; tbl->attribs[i].uid; i++) {
+		if (tbl->attribs[i].uid == NET_MAT_TABLE_ATTR_NAMED_VALUE_VXLAN_SRC_MAC) {
+			smac = tbl->attribs[i].value.u64;
+		} else if (tbl->attribs[i].uid == NET_MAT_TABLE_ATTR_NAMED_VALUE_VXLAN_DST_MAC) {
+			dmac = tbl->attribs[i].value.u64;
+		} else if (tbl->attribs[i].uid == NET_MAT_TABLE_ATTR_NAMED_VALUE_MISS_DFLT_EGRESS_PORT) {
+			dflt_port = tbl->attribs[i].value.u16;
+			have_dflt_port = true;
+		} else {
+			return -EINVAL;
+		}
+	}
+
+	switch (tbl->uid) {
+	case TABLE_TUNNEL_ENGINE_A:
+		te = 0;
+		break;
+	case TABLE_TUNNEL_ENGINE_B:
+		te = 1;
+		break;
+	default:
+		fprintf(stderr, "ERROR: Table %i, does not support updates\n", tbl->uid);
+		return -EINVAL;
+	}
+
+	err =  switch_tunnel_engine_set_default_smac(te, smac);
+	if (err) {
+		fprintf(stderr, "Error: set_default_smac failed (%d)\n", err);
+		return err;
+	}
+
+	err =  switch_tunnel_engine_set_default_dmac(te, dmac);
+	if (err) {
+		fprintf(stderr, "Error: set_default_dmac failed (%d)\n", err);
+		return err;
+	}
+
+	values_tunnel_engine[IES_VXLAN_SRC_MAC].value.u64 = smac;
+	values_tunnel_engine[IES_VXLAN_DST_MAC].value.u64 = dmac;
+
+	if (!have_dflt_port)
+		return err;
+
+	err = fm10000GetTeTrap(sw, te, &teTrapCfg, false);
+	if (err) {
+		fprintf(stderr, "GetTeTrap(%i) failed (%d)\n", i, err);
+		return err;
+	}
+	teTrapCfg.trapGlort = dflt_port;
+	teTrapCfg.noFlowMatch = FM_FM10000_TE_TRAP_DGLORT0;
+	err = fm10000SetTeTrap(sw, 0, &teTrapCfg,
+			       FM10000_TE_TRAP_BASE_DGLORT | FM10000_TE_TRAP_NO_FLOW_MATCH, false);
+	if (err) {
+		fprintf(stderr, "SetTeTrap(%i) failed (%d)\n", i, err);
+		return err;
+	}
+
+	values_tunnel_engine[IES_VXLAN_MISS_DFLT_PORT].value.u16 = dflt_port;
+
+	return err;
+}
+
+static int cleanup(const char *src, int err)
+{
+	fprintf(stderr, "ERROR: %s: %s\n", src, fmErrorMsg(err));
+	return -1;
+}
+
+static void ies_get_pkt_stats(struct net_mat_port_stats *s, fm_portCounters *c)
+{
+	s->rx_packets = c->cntRxUcstPkts +
+			c->cntRxBcstPkts +
+			c->cntRxMcstPkts;
+
+	s->tx_packets = c->cntTxUcstPkts +
+			c->cntTxBcstPkts +
+			c->cntTxMcstPkts;
+}
+
+static int ies_ports_get(struct net_mat_port **ports)
+{
+	struct net_mat_port *p;
+	fm_switchInfo swInfo;
+	int cpi;
+	int i;
+
+	fmGetSwitchInfo(sw, &swInfo);
+
+	p = calloc((size_t)swInfo.numCardPorts + 1, sizeof(struct net_mat_port));
+	if (!p)
+		return -ENOMEM;
+
+	for (i = 0, cpi = 1 ; cpi < swInfo.numCardPorts ; cpi++)  {
+		fm_int err;
+		fm_int port;
+		fm_bool	pi = FM_DISABLED;
+		fm_int mode, state, info[64];
+		fm_portCounters counter;
+		fm_uint32 speed;
+
+		err = fmMapCardinalPort(sw, cpi, &port, NULL);
+		if(err != FM_OK) {
+			free(p);
+			return cleanup("fmMapCardinalPort", err);
+		}
+
+		err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi);
+		if (err != FM_OK) {
+			cleanup("fmGetPortAttribute", err);
+			continue;
+		}
+
+		if (pi == FM_ENABLED)
+			continue;
+
+		err = fmGetPortAttribute(sw, port, FM_PORT_SPEED, &speed);
+		if (err != FM_OK) {
+			cleanup("fmGetPortAttribute(... FM_PORT_SPEED ...", err);
+			continue;
+		}
+
+		err = fmGetPortAttribute(sw, port, FM_PORT_MAX_FRAME_SIZE,
+		                         &p[i].max_frame_size);
+		if (err != FM_OK) {
+			cleanup("fmGetPortAttribute()", err);
+			continue;
+		}
+
+		err = fmGetPortState(sw, port, &mode, &state, info);
+		if(err != FM_OK && err != FM_ERR_BUFFER_FULL) {
+			cleanup("fmGetPortState()", err);
+			continue;
+		}
+
+		err = fmGetPortCounters(sw, port, &counter);
+		if (err != FM_OK)
+			cleanup("fmGetPortCounters()", err);
+		else
+			ies_get_pkt_stats(&p[i].stats, &counter);
+
+		switch (speed) {
+		case 100000:
+			p[i].speed = NET_MAT_PORT_T_SPEED_100G;
+			break;
+		case 40000:
+			p[i].speed = NET_MAT_PORT_T_SPEED_40G;
+			break;
+		case 20000:
+			p[i].speed = NET_MAT_PORT_T_SPEED_20G;
+			break;
+		case 10000:
+			p[i].speed = NET_MAT_PORT_T_SPEED_10G;
+			break;
+		case 1000:
+			p[i].speed = NET_MAT_PORT_T_SPEED_1G;
+			break;
+		case 2500:
+			p[i].speed = NET_MAT_PORT_T_SPEED_2D5G;
+			break;
+		default:
+			p[i].speed = 0;
+			break;
+		}
+
+		switch (state) {
+		case FM_PORT_STATE_UP:
+			p[i].state = NET_MAT_PORT_T_STATE_UP;
+			break;
+		case FM_PORT_STATE_DOWN:
+			p[i].state = NET_MAT_PORT_T_STATE_DOWN;
+			break;
+		default:
+			fprintf(stderr, "Warning: unknown port state %i\n", state);
+			break;
+		}
+
+		p[i].port_id = (__u32)cpi;
+		i++;
+	}
+
+	*ports = p;
+
+	return 0;
+}
+
+static int ies_ports_set(struct net_mat_port *ports)
+{
+	struct net_mat_port *p;
+	fm_switchInfo swInfo;
+	int i, err = 0;
+
+	fmGetSwitchInfo(sw, &swInfo);
+
+	for (p = &ports[0], i = 0 ; p->port_id > 0; p = &ports[i], i++)  {
+		fm_int port = (int)p->port_id;
+		fm_uint32 s = 0;
+
+		switch (p->state) {
+		case NET_MAT_PORT_T_STATE_UNSPEC:
+			break;
+		case NET_MAT_PORT_T_STATE_UP:
+			err = fmSetPortState(sw, port, FM_PORT_MODE_UP, 0);
+			break;
+		case NET_MAT_PORT_T_STATE_DOWN:
+			err = fmSetPortState(sw, port, FM_PORT_MODE_ADMIN_DOWN, 0);
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (err) {
+			fprintf(stderr, "Error: SetPortState failed!\n");
+			return -EINVAL;
+		}
+
+		switch (p->speed) {
+		case NET_MAT_PORT_T_SPEED_UNSPEC:
+			break;
+		case NET_MAT_PORT_T_SPEED_100G:
+			s = FM_PORT_CAPABILITY_SPEED_100G;
+			break;
+		case NET_MAT_PORT_T_SPEED_40G:
+			s = FM_PORT_CAPABILITY_SPEED_40G;
+			break;
+		case NET_MAT_PORT_T_SPEED_20G:
+			s = FM_PORT_CAPABILITY_SPEED_20G;
+			break;
+		case NET_MAT_PORT_T_SPEED_10G:
+			s = FM_PORT_CAPABILITY_SPEED_10G;
+			break;
+		case NET_MAT_PORT_T_SPEED_1G:
+			s = FM_PORT_CAPABILITY_SPEED_1G;
+			break;
+		case NET_MAT_PORT_T_SPEED_2D5G:
+			s = FM_PORT_CAPABILITY_SPEED_2PT5G;
+			break;
+		default:
+			return -EINVAL;
+			break;
+		}
+
+		if (p->speed != NET_MAT_PORT_T_SPEED_UNSPEC) {
+			err = fmSetPortAttribute(sw, port, FM_PORT_SPEED, &s);
+			if (err) {
+				fprintf(stderr, "Error: SetPortAttribute FM_PORT_SPEED failed!\n");
+				return -EINVAL;
+			}
+		}
+
+		if (p->max_frame_size) {
+			err = fmSetPortAttribute(sw, port,
+			                         FM_PORT_MAX_FRAME_SIZE,
+			                         &p->max_frame_size);
+			if (err) {
+				fprintf(stderr, "Error: SetPortAttribute FM_PORT_MAX_FRAME_SIZE failed!\n");
+				return -EINVAL;
+			}
+		}
+	}
+
+	return err;
+}
+
+static int ies_port_get_lport(struct net_mat_port_pci *pci, unsigned int *lport)
+{
+	int n = pci_to_lport(pci->bus, pci->device, pci->function);
+	int err = 0;
+
+#ifdef DEBUG
+	printf("get_lport pci %u:%u.%u lport %i\n", pci->bus, pci->device, pci->function, n);
+#endif
+	if (n < 0)
+		err = n;
+	else
+		*lport = (unsigned int)n;
+
+	return err;
+}
+
+struct match_backend ies_pipeline_backend = {
+	.name = "ies_pipeline",
+	.hdrs = my_header_list,
+	.actions = my_action_list,
+	.tbls = my_table_list,
+	.hdr_nodes = my_hdr_nodes,
+	.tbl_nodes = my_tbl_nodes,
+	.open = ies_pipeline_open,
+	.close = ies_pipeline_close,
+	.get_rule_counters = ies_pipeline_get_rule_counters,
+	.del_rules = ies_pipeline_del_rules,
+	.set_rules = ies_pipeline_set_rules,
+	.create_table = ies_pipeline_create_table,
+	.destroy_table = ies_pipeline_destroy_table,
+	.update_table = ies_pipeline_update_table,
+	.get_ports = ies_ports_get,
+	.set_ports= ies_ports_set,
+	.get_lport = ies_port_get_lport,
+};
+
+MATCH_BACKEND_REGISTER(ies_pipeline_backend)
+
+static void eventHandler(fm_int event, fm_int sw, void *ptr)
+{
+	fm_eventPort *portEvent = (fm_eventPort *) ptr;
+
+	FM_NOT_USED(sw);
+
+	switch (event) {
+	case FM_EVENT_SWITCH_INSERTED:
+		printf("Switch #%d inserted!\n", sw);
+		if (sw == FM_MAIN_SWITCH)
+			fmSignalSemaphore(&seqSem);
+		break;
+
+	case FM_EVENT_PORT:
+		printf("port event: port %d is %s\n", portEvent->port, (portEvent->linkStatus ? "up" : "down"));
+		break;
+
+	case FM_EVENT_PKT_RECV:
+		printf("packet received\n");
+		break;
+	}
+}
+
+int switch_init(int one_vlan)
+{
+	fm_status       err = 0;
+	fm_timestamp    wait = { 3, 0 };
+	fm_int          cpi;
+	fm_int          port;
+	fm_uint16	vlan;
+	fm_switchInfo   swInfo;
+	fm_bool		bv = FM_DISABLED;
+	fm_bool		re = FM_ENABLED;
+	fm_bool		pi = FM_DISABLED;
+	fm_int		pc = FM_PORT_PARSER_STOP_AFTER_L4;
+	fm_uint32	defvlan;
+#ifdef VXLAN_MCAST
+	int		i;
+#endif /* VXLAN_MCAST */
+    
+	fmOSInitialize();
+    
+	fmCreateSemaphore(seq_str, FM_SEM_BINARY, &seqSem, 0);
+
+	if ((err = fmInitialize(eventHandler)) != FM_OK) {
+		return cleanup("fmInitialize", err);
+	}
+
+	fmWaitSemaphore(&seqSem, &wait);
+
+	if((err = fmSetSwitchState(sw, TRUE)) != FM_OK ) {
+		return cleanup("fmSetSwitchState", err);
+	}
+
+	defvlan = vlan = FM_DEFAULT_VLAN;
+
+	fmGetSwitchInfo(sw, &swInfo);
+
+	if (one_vlan)
+		fmCreateVlan(sw, vlan);
+
+	/* init non cpu ports and put them into their own vlan, make sure */
+	/* the parser goes to l4, no vlan boundary check, and routable    */
+	for (cpi = 1 ; cpi < swInfo.numCardPorts ; cpi++) {
+		if((err = fmMapCardinalPort(sw, cpi, &port, NULL)) != FM_OK) {
+			return cleanup("fmMapCardinalPort", err);
+		}
+		printf("cpi=%d, port=%d\n", cpi, port);
+
+		if ((err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi)) != FM_OK) {
+			cleanup("fmGetPortAttribute", err);
+			printf("skip port %d\n", port);
+			continue;
+		}
+		if (pi == FM_ENABLED) {
+			printf("skip internal port %d\n", port);
+			continue;
+		}
+
+		if (!one_vlan) {
+			vlan = (fm_uint16)port;
+			defvlan = (fm_uint32)vlan;
+
+			fmCreateVlan(sw, vlan);
+		}
+
+		if((err = fmSetPortState(sw, port, FM_PORT_STATE_UP, 0)) != FM_OK) {
+			return cleanup("fmSetPortState", err);
+		}
+		printf("set port %d to UP\n", port);
+
+		if((err = fmAddVlanPort(sw, vlan, port, FALSE)) != FM_OK) {
+			return cleanup("fmAddVlanPort", err);
+		}
+		printf("add port %d to vlan %u\n", port, vlan);
+
+		if(( err = fmSetVlanPortState(sw, vlan, port, FM_STP_STATE_FORWARDING)) != FM_OK) {
+			return cleanup("fmSetVlanPortState", err);
+		}
+		printf("set STP state of port %d in vlan %u to forwarding\n", port, vlan);
+
+		if((err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan)) != FM_OK) {
+			return cleanup("fmSetPortAttribute", err);
+		}
+		printf("set pvid for  port %d to vlan %u\n", port, vlan);
+
+		if((err = fmSetPortAttribute(sw, port, FM_PORT_DROP_BV, &bv)) != FM_OK) {
+			return cleanup("fmSetPortAttribute", err);
+		}
+		printf("set FM_PORT_DROP_BV for port %d to %d\n", port, bv);
+
+		if((err = fmSetPortAttribute(sw, port, FM_PORT_PARSER, &pc)) != FM_OK) {
+			return cleanup("fmSetPortAttribute", err);
+		}
+		printf("set FM_PORT_PARSER for port %d to %d\n", port, pc);
+
+		if((err = fmSetPortAttribute(sw, port, FM_PORT_ROUTABLE, &re)) != FM_OK) {
+			return cleanup("fmSetPortAttribute", err);
+		}
+		printf("set FM_PORT_ROUTABLE for port %d to %d\n", port, re);
+	}
+
+	/* port cpu port on default vlan */
+	defvlan = vlan = FM_DEFAULT_VLAN;
+	if(( err =fmGetCpuPort(sw, &port)) != FM_OK) {
+		return cleanup("fmGetCpuPort", err);
+	}
+	printf("find cpu port %d\n", port);
+	if((err = fmAddVlanPort(sw, vlan, port, FALSE)) != FM_OK) {
+		return cleanup("fmAddVlanPort", err);
+	}
+	printf("add port %d to vlan %u\n", port, vlan);
+	if((err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan)) != FM_OK) {
+		return cleanup("fmSetPortAttribute", err);
+	}
+	printf("set pvid for  port %d to vlan %u\n", port, vlan);
+
+	printf("Switch is UP, all ports are now enabled\n");
+
+#ifdef VXLAN_MCAST
+	for (i=0; i< MATCH_TABLE_SIZE; i++) {
+		match_mcast_group[i] = -1;
+	}
+#endif /* VXLAN_MCAST */
+
+	return err;
+}
+
+static void switch_clean_shm(void)
+{
+	char *shm_key_env = NULL, *shm_key_str = NULL;
+	int shm_key = 0;
+	int shm_id = 0;
+	struct shmid_ds shm_info;
+
+	printf("Cleaning up shared memory...");
+	if ((shm_key_env = getenv("FM_API_SHM_KEY")) != NULL) {
+		shm_key_str = strtok(shm_key_env, ",");
+		if(!shm_key_str)
+			return;
+		shm_key = (int) strtol(shm_key_str, NULL, 10);
+		printf("shm_key=%d", shm_key);
+
+		shm_id = shmget(shm_key, 0, 0);
+		printf(",shm_id=0x%x", shm_id);
+
+		 if (shm_id != -1)
+			shmctl(shm_id, IPC_RMID, &shm_info);
+	}
+	printf("...done.\n");
+}
+
+void switch_close(void)
+{
+	switch_clean_shm();
+
+	printf("Calling fmTerminate()\n");
+	fmTerminate();
+}
+
+int switch_router_init(__u64 router_mac, int update_dmac, int update_smac,
+			int update_vlan, int update_ttl, int curr_sw)
+{
+	fm_status       err = 0;
+	int		i;
+	fm_int          cpi;
+	fm_int          port;
+	fm_uint32	ru = 0;
+	fm_bool		pi = FM_DISABLED;
+	fm_bool		rt = 0;
+	fm_switchInfo   swInfo;
+
+	for(i=0; i<TABLE_NEXTHOP_SIZE; i++) {
+		ecmp_group[i].hw_group_id = -1;
+		ecmp_group[i].num_nhs = 0;
+	}
+
+	memset(l2mp_group, -1, TABLE_L2_MP_SIZE);
+
+	if (curr_sw)
+		sw = curr_sw;
+
+	fmGetSwitchInfo(sw, &swInfo);
+
+	ru = (fm_uint32)(update_dmac ? FM_PORT_ROUTED_FRAME_UPDATE_DMAC : 0) |
+	     (fm_uint32)(update_smac ? FM_PORT_ROUTED_FRAME_UPDATE_SMAC : 0) |
+	     (fm_uint32)(update_vlan ? FM_PORT_ROUTED_FRAME_UPDATE_VLAN : 0);
+
+	rt = update_ttl ? FM_ENABLED : FM_DISABLED;
+
+	for (cpi = 1 ; cpi < swInfo.numCardPorts ; cpi++) {
+		if((err = fmMapCardinalPort(sw, cpi, &port, NULL)) != FM_OK) {
+			return cleanup("fmMapCardinalPort", err);
+		}
+		printf("cpi=%d, port=%d\n", cpi, port);
+
+		if ((err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi)) != FM_OK) {
+			cleanup("fmGetPortAttribute", err);
+			printf("skip port %d\n", port);
+			continue;
+		}
+		if (pi == FM_ENABLED) {
+			printf("skip internal port %d\n", port);
+			continue;
+		}
+
+		if((err = fmSetPortAttribute(sw, port, FM_PORT_ROUTED_FRAME_UPDATE_FIELDS, &ru)) != FM_OK) {
+			return cleanup("fmSetPortAttribute", err);
+		}
+		printf("set FM_PORT_ROUTED_FRAME_UPDATE_FIELDS for port %d to 0x%08x\n", port, ru);
+
+		if((err = fmSetPortAttribute(sw, port, FM_PORT_UPDATE_TTL, &rt)) != FM_OK) {
+			return cleanup("fmSetPortAttribute", err);
+		}
+		printf("set FM_PORT_UPDATE_TTL for port %d to %d\n", port, rt);
+	}
+
+	if((err = fmSetRouterAttribute(sw, FM_ROUTER_PHYSICAL_MAC_ADDRESS, (void *)&router_mac)) != FM_OK) {
+		return cleanup("fmSetRouterAttribute", err);
+	}
+	printf("set default router mac to 0x%012llx\n", router_mac);
+
+	if((err = fmSetRouterState(sw, 0, FM_ROUTER_STATE_ADMIN_UP)) != FM_OK) {
+		return cleanup("fmSetRouterState", err);
+	}
+	printf("bring up the default router\n");
+
+	return err;
+}
+
+int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, __u16 parser_vxlan_port)
+{
+	fm_status                err = FM_OK;
+	//fm_switch               *switchPtr;
+	fm_fm10000TeGlortCfg     teGlortCfg;
+	fm_fm10000TeChecksumCfg  teChecksumCfg;
+	fm_uint32                checksumCfgFieldSelectMask;
+	fm_fm10000TeTunnelCfg    tunnelCfg;
+	fm_uint32                tunnelCfgFieldSelectMask;
+	fm_fm10000TeParserCfg    parserCfg;
+	fm_uint32                parserCfgFieldSelectMask;
+
+#ifdef DEBUG
+	printf("configuring tunnel engine %d: smac 0x%012llx, dmac 0x%012llx, l4dst %d, parser_vxlan_port %d\n",
+	       te, smac, dmac, l4dst, parser_vxlan_port);
+#endif /* DEBUG */
+
+	//switchPtr = GET_SWITCH_PTR(sw);
+
+	teGlortCfg.encapDglort = 0;
+	teGlortCfg.decapDglort = 0;
+	err = fm10000SetTeDefaultGlort(sw,
+				       te,
+				       &teGlortCfg,
+				       FM10000_TE_DEFAULT_GLORT_ENCAP_DGLORT |
+				       FM10000_TE_DEFAULT_GLORT_DECAP_DGLORT,
+				       TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeChecksum", err);
+
+	checksumCfgFieldSelectMask = 0;
+
+	teChecksumCfg.notIp = FM_FM10000_TE_CHECKSUM_COMPUTE;
+	checksumCfgFieldSelectMask |= FM10000_TE_CHECKSUM_NOT_IP;
+
+	teChecksumCfg.notTcpOrUdp = FM_FM10000_TE_CHECKSUM_COMPUTE;
+	checksumCfgFieldSelectMask |= FM10000_TE_CHECKSUM_NOT_TCP_OR_UDP;
+
+	teChecksumCfg.tcpOrUdp = FM_FM10000_TE_CHECKSUM_COMPUTE;
+	checksumCfgFieldSelectMask |= FM10000_TE_CHECKSUM_TCP_OR_UDP;
+
+	err = fm10000SetTeChecksum(sw,
+				   te,
+				   &teChecksumCfg,
+				   checksumCfgFieldSelectMask,
+				   TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeChecksum", err);
+
+	tunnelCfgFieldSelectMask = 0;
+
+	tunnelCfg.l4DstVxLan = l4dst /*FM10000_FLOW_VXLAN_PORT*/;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_L4DST_VXLAN;
+
+	//tunnelCfg.l4DstNge = FM10000_FLOW_NGE_PORT;
+	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_L4DST_NGE;
+
+	tunnelCfg.dmac = dmac /*switchPtr->physicalRouterMac*/;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_DMAC;
+
+	tunnelCfg.smac = smac /*switchPtr->physicalRouterMac*/;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_SMAC;
+
+	//tunnelCfg.ngeTime = FALSE;
+	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_NGE_TIME;
+
+	//tunnelCfg.encapProtocol = FM10000_FLOW_NVGRE_PROTOCOL;
+	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_PROTOCOL;
+
+	//tunnelCfg.encapVersion = FM10000_FLOW_NVGRE_VERSION;
+	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_VERSION;
+
+	err = fm10000SetTeDefaultTunnel(sw,
+					te,
+					&tunnelCfg,
+					tunnelCfgFieldSelectMask,
+					TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeDefaultTunnel", err);
+
+	parserCfgFieldSelectMask = 0;
+
+	parserCfg.vxLanPort = parser_vxlan_port /*FM10000_FLOW_VXLAN_PORT*/;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_VXLAN_PORT;
+
+	//parserCfg.ngePort = FM10000_FLOW_NGE_PORT;
+	//parserCfgFieldSelectMask |= FM10000_TE_PARSER_NGE_PORT;
+
+	err = fm10000SetTeParser(sw,
+				 te,
+				 &parserCfg,
+				 parserCfgFieldSelectMask,
+				 TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeParser", err);
+
+	return err;
+}
+
+int switch_tunnel_engine_set_default_smac(int te, __u64 smac)
+{
+	fm_status                err = FM_OK;
+	fm_fm10000TeTunnelCfg    tunnelCfg;
+	fm_uint32                tunnelCfgFieldSelectMask;
+
+#ifdef DEBUG
+	printf("setting tunnel engine %d default smac 0x%012llx\n", te, smac);
+#endif /* DEBUG */
+
+	tunnelCfgFieldSelectMask = 0;
+
+	tunnelCfg.smac = smac;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_SMAC;
+
+	err = fm10000SetTeDefaultTunnel(sw,
+					te,
+					&tunnelCfg,
+					tunnelCfgFieldSelectMask,
+					TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeDefaultTunnel", err);
+
+	return err;
+}
+
+int switch_tunnel_engine_set_default_dmac(int te, __u64 dmac)
+{
+	fm_status                err = FM_OK;
+	fm_fm10000TeTunnelCfg    tunnelCfg;
+	fm_uint32                tunnelCfgFieldSelectMask;
+
+#ifdef DEBUG
+	printf("setting tunnel engine %d default dmac 0x%012llx\n", te, dmac);
+#endif /* DEBUG */
+
+	tunnelCfgFieldSelectMask = 0;
+
+	tunnelCfg.dmac = dmac;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_DMAC;
+
+	err = fm10000SetTeDefaultTunnel(sw,
+					te,
+					&tunnelCfg,
+					tunnelCfgFieldSelectMask,
+					TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeDefaultTunnel", err);
+
+	return err;
+}
+
+void switch_debug(int on)
+{
+	if (!on)
+		return;
+
+	fmDbgDumpArpTable(sw, FALSE);
+	fmDbgDumpFFU(sw, TRUE, TRUE);
+	fmDbgDumpStatChanges(sw, TRUE);
+}
+
+int switch_get_rule_counters(__u32 ruleid, __u32 switch_table_id,
+			__u64 *pkts, __u64 *octets)
+{
+	fm_status err = FM_OK;
+	fm_flowCounters counters;
+
+	if((err = fmGetFlowCount(sw, (int)switch_table_id, (int)ruleid, &counters)) != FM_OK) {
+		return cleanup("fmGetFlowCount", err);
+	}
+#ifdef DEBUG
+	else
+		printf("%s: rule table %d ruleid %d pkts %lld octets %lld\n", 
+		       __func__, switch_table_id, ruleid, counters.cntPkts, counters.cntOctets);
+#endif /* DEBUG */
+
+	if (pkts)
+		*pkts = counters.cntPkts;
+	if (octets)
+		*octets = counters.cntOctets;
+
+	return err;
+}
+
+/*
+ * Get the PF/VF index given a glort.
+ *
+ * The PF/VF index is 0 if the glort maps to a Physical Function (PF).
+ * The minimum and maximum VF indices are 1 and 64, respectively.
+ *
+ * GloRTs are assumed to be mapped by the host driver as follows:
+ *    GloRT Range       PEP Index  PF/VF Index Range
+ *  0x4000 - 0x403F ->    0           1-64
+ *  0x4040 - 0x4040 ->    0            0 (physical function)
+ *  0x4100 - 0x413F ->    1           1-64
+ *  0x4140 - 0x4140 ->    1            0 (physical function)
+ *  0x4200 - 0x423F ->    2           1-64
+ *  0x4240 - 0x4240 ->    2            0 (physical function)
+ *  0x4300 - 0x433F ->    3           1-64
+ *  0x4340 - 0x4340 ->    3            0 (physical function)
+ *  0x4400 - 0x443F ->    4           1-64
+ *  0x4440 - 0x4440 ->    4            0 (physical function)
+ *  0x4500 - 0x453F ->    5           1-64
+ *  0x4540 - 0x4540 ->    5            0 (physical function)
+ *  0x4600 - 0x463F ->    6           1-64
+ *  0x4640 - 0x4640 ->    6            0 (physical function)
+ *  0x4700 - 0x473F ->    7           1-64
+ *  0x4740 - 0x4740 ->    7            0 (physical function)
+ *  0x4800 - 0x483F ->    8           1-64
+ *  0x4840 - 0x4840 ->    8            0 (physical function)
+ *
+ * @param glort
+ *   The glort tag
+ * @return The PF/VF index on success or -EINVAL if the glort is invalid
+ */
+#define GLORT_MIN 0x4000
+#define GLORT_MAX 0x4840
+#define GLORT_PFVF_MASK 0xFF
+#define GLORT_PF_ID 64
+static int glort_to_pfvf(uint32_t glort)
+{
+	uint32_t pfvf = 0;
+
+	if (glort < GLORT_MIN || glort > GLORT_MAX)
+		return -EINVAL;
+
+	pfvf = glort & GLORT_PFVF_MASK;
+	if (pfvf < GLORT_PF_ID) {
+		/* pfvf is a valid virtual function */
+		pfvf += 1;
+	} else if (pfvf == GLORT_PF_ID) {
+		/* pfvf is a valid physical function */
+		pfvf = 0;
+	} else {
+		/* pfvf is invalid */
+		return -EINVAL;
+	}
+
+	return (int)pfvf;
+}
+
+/*
+ * Get the PEP number given a glort.
+ *
+ * Only PEPs 0-8 are valid.
+ *
+ * @param glort
+ *   The glort tag
+ * @return PEP number on success or -EINVAL.
+ */
+#define GLORT_PEP_MASK 0xF00
+#define GLORT_PEP_SHIFT 8
+#define GLORT_PEP_MAX 8
+static inline int glort_to_pep(uint32_t glort)
+{
+	uint32_t pep;
+
+	if (glort < GLORT_MIN || glort > GLORT_MAX)
+		return -EINVAL;
+
+	pep = (glort & GLORT_PEP_MASK) >> GLORT_PEP_SHIFT;
+
+	return (pep > GLORT_PEP_MAX) ? -EINVAL : (int)pep;
+}
+
+/*
+ * pci_to_pep() - convert a PCI address to a PEP number
+ * @bus: the pci bus
+ * @device: the pci device
+ * @function: the pci function
+ *
+ * The PEP number is read from the Vital Product Data (VPD)
+ * file stored in the device's pci sysfs directory.
+ *
+ * The PCI domain is hardcoded to 0 for now.
+ *
+ * The PCI device and functions are hardcoded to 0 because the VPD
+ * file is only present for the physical function, which is device 0,
+ * function 0.
+ *
+ * Return: PEP number on success, or a negative error code.
+ */
+#define PCI_PATH_BASE "/sys/bus/pci/devices"
+#define PCI_DEV_FMT "0000:%02" PRIx8 ":00.0"
+#define PCI_VPD "vpd"
+static int pci_to_pep(uint8_t bus)
+{
+	char fname[PATH_MAX];
+	uint32_t buf[BUFSIZ];
+	FILE *f;
+	size_t n;
+	int err;
+
+	/* read Vital Product Data from sysfs pci device file */
+	err = snprintf(fname, sizeof(fname),
+		       PCI_PATH_BASE "/" PCI_DEV_FMT "/" PCI_VPD, bus);
+
+	if (err < 0 || err >= (int)sizeof(fname))
+		return -ENOMEM;
+
+	f = fopen(fname, "r");
+	if (!f) {
+		fprintf(stderr, "Error: Cannot open %s\n", fname);
+		return -errno;
+	}
+
+	n = fread(buf, sizeof(uint32_t), 8, f);
+	if (n != 8) {
+		fprintf(stderr, "Error: Cannot read %s\n", fname);
+		fclose(f);
+		return -errno;
+	}
+
+	fclose(f);
+
+	/* pep index is stored in bits 12:9 of the sixth dword in the vpd */
+	return (int)((buf[5] & 0xf00) >> 8);
+}
+
+/*
+ * pci_to_lport() - convert a PCI address to a logical port number
+ * @bus: the pci bus number
+ * @device: the pci device number
+ * @function: the pci function number. This will be 0 for the physical
+ *            function or non-zero corresponding to the vf number.
+ *
+ * Return: The logical port number on success, or a negative error on failure
+ */
+int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function)
+{
+	fm_status err;
+	fm_int nEntries = 0;
+	fm_macAddressEntry *entries = NULL;
+	int pep;
+	int i;
+
+	pep = pci_to_pep(bus);
+	if (pep < 0)
+		return -EINVAL;
+
+	err = fmGetAddressTableExt(sw, &nEntries, NULL, 0);
+	if (err)
+		return cleanup(__func__, err);
+
+	if (nEntries == 0)
+		return -ENOENT;
+
+	entries = malloc(sizeof(*entries) * (size_t)nEntries);
+	if (!entries)
+		return -ENOMEM;
+
+	err = fmGetAddressTableExt(sw, &nEntries, entries, nEntries);
+	if (err) {
+		free(entries);
+		return cleanup(__func__, err);
+	}
+
+	for (i = 0; i < nEntries; ++i) {
+		uint32_t glort = 0;
+		int entry_pep = 0;
+		int entry_dev = 0;
+		int entry_pfvf = 0;
+		int port = entries[i].port;
+
+		err = fmGetStackGlort(sw, port, &glort);
+		if (err) {
+			free(entries);
+			return cleanup(__func__, err);
+		}
+
+		entry_pep = glort_to_pep(glort);
+		entry_pfvf = glort_to_pfvf(glort);
+		if (entry_pep < 0 || entry_pfvf < 0)
+			continue;
+
+		/* There are up to 8 functions per PCI device. If
+		 * there are more than 7 VFs created, the device
+		 * will be incremented, and the function numbering
+		 * will restart from 0 */
+		entry_dev = (int)((uint32_t)entry_pfvf >> 3);
+		entry_pfvf = (int)((uint32_t)entry_pfvf & 0x7);
+
+		if (pep == entry_pep && device == entry_dev &&
+		    function == entry_pfvf) {
+			free(entries);
+			return port;
+		}
+	}
+
+	free(entries);
+	return -ENOENT;
+}
+
+int
+switch_add_mac_entry(struct net_mat_field_ref *matches,
+		     struct net_mat_action *actions)
+{
+	fm_macAddressEntry macEntry;
+	fm_status err;
+	uint64_t mac_address = 0;
+	uint16_t vlan_id = FM_DEFAULT_VLAN;
+	bool mac_found = false;
+	bool lport_found = false;
+	bool vsi_found = false;
+	uint8_t bus;
+	uint8_t device;
+	uint8_t function;
+	int lport = -1;
+	__u32 group;
+	int i;
+
+	for (i = 0; matches && matches[i].instance; i++) {
+		switch (matches[i].instance) {
+		case HEADER_INSTANCE_ETHERNET:
+			mac_address = matches[i].v.u64.value_u64;
+			mac_found = true;
+			break;
+		case HEADER_INSTANCE_VLAN_OUTER:
+			if (matches[i].field != HEADER_VLAN_VID)
+				return -EINVAL;
+			vlan_id = matches[i].v.u16.value_u16;
+			break;
+		default:
+			fprintf(stderr, "Error: unknown match instance %d\n",
+				matches[i].instance);
+			return -EINVAL;
+		}
+	}
+
+	for (i = 0; actions && actions[i].uid; i++) {
+		switch(actions[i].uid) {
+		case ACTION_FORWARD_VSI:
+			bus = actions[i].args[0].v.value_u8;
+			device = actions[i].args[1].v.value_u8;
+			function = actions[i].args[2].v.value_u8;
+			vsi_found = true;
+			break;
+		case ACTION_SET_EGRESS_PORT:
+			lport = (int)actions[i].args[0].v.value_u32;
+			lport_found = true;
+			break;
+		case ACTION_FORWARD_TO_L2MPATH:
+			group = actions[i].args[0].v.value_u32;
+			if (group >= TABLE_L2_MP_SIZE)
+				return -EINVAL;
+
+			/* Get the logical port associated with LBG.*/
+			err = fmGetLBGAttribute(sw, l2mp_group[group],
+						FM_LBG_LOGICAL_PORT, &lport);
+			if (err != FM_OK)
+				return cleanup("fmGetLBGAttribute", err);
+
+			if (lport < 0)
+				return -EINVAL;
+			lport_found = true;
+			break;
+		default:
+			fprintf(stderr, "Error: unknown action id\n");
+			return -EINVAL;
+		}
+	}
+
+	if (!mac_found) {
+		fprintf(stderr, "Error: mac address is required\n");
+		return -EINVAL;
+	}
+
+	if (vsi_found && lport_found) {
+		fprintf(stderr, "Error: FORWARD_VSI and SET_EGRESS_PORT actions are mutually exclusive\n");
+		return -EINVAL;
+	}
+
+	if (!(vsi_found || lport_found)) {
+		fprintf(stderr, "Error: no action specified\n");
+		return -EINVAL;
+	}
+
+	if (vsi_found) {
+		lport = pci_to_lport(bus, device, function);
+		if (lport < 0) {
+			fprintf(stderr, "Error: pci to log port\n");
+			return -EINVAL;
+		}
+	}
+
+	memset(&macEntry, 0, sizeof(fm_macAddressEntry));
+
+	macEntry.type = FM_ADDRESS_STATIC;
+	macEntry.vlanID = vlan_id;
+	macEntry.macAddress = mac_address;
+	macEntry.destMask = FM_DESTMASK_UNUSED;
+	macEntry.port = lport;
+
+#ifdef DEBUG
+	printf("adding mac address 0x%012lx to port %d in vlan %d\n",
+	       mac_address, lport, vlan_id);
+#endif
+
+	err = fmAddAddress(sw, &macEntry);
+	if(err != FM_OK)
+		return cleanup("fmAddAddress", err);
+
+	return 0;
+}
+
+int switch_del_mac_entry(int vlan, __u64 mac)
+{
+	fm_status err;
+	fm_macAddressEntry macEntry;
+
+#ifdef DEBUG
+	int i;
+
+	fm_macAddressEntry *entries, *p;
+	fm_int nEntries;
+
+	printf("reading mac table before ...\n");
+
+	if((entries = malloc(sizeof(fm_macAddressEntry) * FM_MAX_ADDR)) == NULL) {
+		fprintf(stderr, "err allocating space for mac table.\n");
+		return -ENOMEM;
+	}
+	if((err = fmGetAddressTable(sw, &nEntries, entries)) != FM_OK) {
+		free(entries);
+		return cleanup("fmAddAddress", err);
+	}
+
+	p = entries;
+	for(i=0; i<nEntries; i++) {
+		printf("mac entry %d: address 0x%012llx, port %d, vlan %d\n", 
+		        i, p->macAddress, p->port, p->vlanID);
+		p++;
+	}
+#endif /* DEBUG */
+
+	memset(&macEntry, 0, sizeof(fm_macAddressEntry));
+
+	macEntry.type = FM_ADDRESS_STATIC;
+	macEntry.vlanID = (fm_uint16)vlan;
+	macEntry.macAddress = mac;
+	macEntry.destMask = FM_DESTMASK_UNUSED;
+#ifdef DEBUG
+	printf("deleting mac entry vlan %d address 0x%012llx \n", vlan, mac);
+#endif /* DEBUG */
+	if((err = fmDeleteAddress(sw, &macEntry)) != FM_OK) {
+		return cleanup("fmAddAddress", err);
+	}
+
+#ifdef DEBUG
+	printf("reading mac table after ...\n");
+
+	if((err = fmGetAddressTable(sw, &nEntries, entries)) != FM_OK) {
+		return cleanup("fmAddAddress", err);
+	}
+
+	p = entries;
+	for(i=0; i<nEntries; i++) {
+		printf("mac entry %d: address 0x%012llx, port %d, vlan %d\n", 
+		        i, p->macAddress, p->port, p->vlanID);
+		p++;
+	}
+
+	free(entries);
+#endif /* DEBUG */
+
+	return 0;
+}
+
+int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, __u32 *actions, __u32 size, int max_actions)
+{
+	fm_status err = 0;
+	fm_flowCondition condition = 0;
+	fm_bool has_priority = FM_DISABLED;
+	fm_bool has_count = FM_DISABLED;
+	int i;
+	for (i = 0; matches && matches[i].instance; i++) {
+		switch (matches[i].instance) {
+		case HEADER_INSTANCE_ETHERNET:
+			switch(matches[i].field) {
+			case HEADER_ETHERNET_SRC_MAC:
+				condition |= FM_FLOW_MATCH_SRC_MAC;
+				break;
+			case HEADER_ETHERNET_DST_MAC:
+				condition |= FM_FLOW_MATCH_DST_MAC;
+				break;
+			case HEADER_ETHERNET_ETHERTYPE:
+				condition |= FM_FLOW_MATCH_ETHERTYPE;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_ETHERNET, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_VLAN_OUTER:
+			switch(matches[i].field) {
+			case HEADER_VLAN_VID:
+				condition |= FM_FLOW_MATCH_VLAN;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_VLAN, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_IPV4:
+			switch(matches[i].field) {
+			case HEADER_IPV4_SRC_IP:
+				condition |= FM_FLOW_MATCH_SRC_IP;
+				break;
+			case HEADER_IPV4_DST_IP:
+				condition |= FM_FLOW_MATCH_DST_IP;
+				break;
+			case HEADER_IPV4_PROTOCOL:
+				condition |= FM_FLOW_MATCH_PROTOCOL;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_TCP:
+			switch(matches[i].field) {
+			case HEADER_TCP_SRC_PORT:
+				condition |= FM_FLOW_MATCH_L4_SRC_PORT;
+				condition |= FM_FLOW_MATCH_PROTOCOL;
+				break;
+			case HEADER_TCP_DST_PORT:
+				condition |= FM_FLOW_MATCH_L4_DST_PORT;
+				condition |= FM_FLOW_MATCH_PROTOCOL;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_TCP, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_UDP:
+			switch(matches[i].field) {
+			case HEADER_UDP_SRC_PORT:
+				condition |= FM_FLOW_MATCH_L4_SRC_PORT;
+				condition |= FM_FLOW_MATCH_PROTOCOL;
+				break;
+			case HEADER_UDP_DST_PORT:
+				condition |= FM_FLOW_MATCH_L4_DST_PORT;
+				condition |= FM_FLOW_MATCH_PROTOCOL;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_UDP, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_INGRESS_PORT_METADATA:
+			switch(matches[i].field) {
+			case HEADER_METADATA_INGRESS_PORT:
+				condition |= FM_FLOW_MATCH_SRC_PORT;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_METADATA, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		default:
+			fprintf(stderr, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
+			err = -EINVAL;
+			break;
+		}
+	}
+
+	if (err == -EINVAL)
+		return err;
+
+	/* condition = FM_FLOW_TABLE_COND_ALL_12_TUPLE; */
+
+	for (i = 0; actions && actions[i]; i++) {
+		printf("actions[%d] = %d\n", i, actions[i]);
+		switch(actions[i]) {
+		case ACTION_COUNT:
+			has_count = FM_ENABLED;
+			break;
+		}
+	}
+
+#ifdef DEBUG
+	printf("%s: set TCAM table %d to be with count %d\n", __func__, table_id, has_count);
+#endif /* DEBUG */
+	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_WITH_COUNT, &has_count);
+	if(err != FM_OK)
+		return cleanup("fmSetFlowAttribute", err);
+
+	has_priority = FM_ENABLED; /* fix me */
+#ifdef DEBUG
+	printf("%s: set TCAM table %d to be with priority %d\n", __func__, table_id, has_priority);
+#endif /* DEBUG */
+	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_WITH_PRIORITY, &has_priority);
+	if(err != FM_OK)
+		return cleanup("fmSetFlowAttribute", err);
+
+#ifdef DEBUG
+	printf("%s: creating rule TCAM table: table %d, condition 0x%llx, maxEntries %d, maxActions %d\n",
+	       __func__, table_id, condition, size, max_actions);
+#endif /* DEBUG */
+	err = fmCreateFlowTCAMTable(sw, (fm_int)table_id, condition, size, (fm_uint32)max_actions);
+	if(err != FM_OK)
+		return cleanup("fmCreateFlowTCAMTable", err);
+
+	return 0;
+}
+
+int switch_del_TCAM_table(__u32 table_id)
+{
+	fm_status err = 0;
+
+#ifdef DEBUG
+	printf("%s: deleting rule TCAM table %d\n", __func__, table_id);
+#endif /* DEBUG */
+	if((err = fmDeleteFlowTCAMTable(sw, (int)table_id)) != FM_OK)
+		return cleanup("fmDeleteFlowTCAMTable", err);
+
+	return 0;
+}
+
+int switch_add_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action *actions)
+{
+	fm_status err = 0;
+	__u32 ecmp_group_id = 0;
+	__u64 new_dmac = 0;
+	__u16 new_vlan = 0;
+	fm_int hw_group_id = -1;
+	fm_nextHop nh;
+	fm_arpEntry arp;
+
+	if (!matches ||
+	    (matches[0].instance != HEADER_INSTANCE_ROUTING_METADATA) ||
+	    (matches[0].field != HEADER_METADATA_ECMP_GROUP_ID) ||
+	    (matches[1].instance)) {
+		fprintf(stderr, "%s: error in matches\n", __func__);
+		return -EINVAL;
+	}
+
+	ecmp_group_id = matches[0].v.u32.value_u32;
+#ifdef DEBUG
+	printf("%s: match EDMP_GROUP_ID: %d\n", __func__, ecmp_group_id);
+#endif /* DEBUG */
+	if(ecmp_group_id >= TABLE_NEXTHOP_SIZE) {
+		fprintf(stderr, "%s: invalid ecmp group id %d\n", __func__, ecmp_group_id);
+		return -EINVAL;
+	}
+
+	if (!actions ||
+	    (actions[0].uid != ACTION_ROUTE) ||
+	    (actions[1].uid)) {
+		fprintf(stderr, "%s: error in actions\n", __func__);
+		return -EINVAL;
+	}
+
+	new_dmac = actions[0].args[0].v.value_u64;
+	new_vlan = actions[0].args[1].v.value_u16;
+	if(new_vlan >= 4096) {
+		fprintf(stderr, "%s: invalid newVLAN %d\n", __func__, new_vlan);
+		return -EINVAL;
+	}
+#ifdef DEBUG
+	printf("%s: action ROUTE(0x%012llx:%u)\n", __func__, new_dmac, new_vlan);
+#endif /* DEBUG */
+
+	if (ecmp_group[ecmp_group_id].hw_group_id == -1) {
+#ifdef DEBUG
+		printf("%s: creating ecmp group %d\n", __func__, ecmp_group_id);
+#endif /* DEBUG */
+		if((err = fmCreateECMPGroupV2(sw, &hw_group_id, NULL)) != FM_OK)
+			return cleanup("fmDeleteFlowTCAMTable", err);
+		else {
+			ecmp_group[ecmp_group_id].hw_group_id = hw_group_id;
+#ifdef DEBUG
+			printf("%s: created ecmp group %d, hw_group_id %d\n",
+			       __func__, ecmp_group_id, hw_group_id);
+#endif /* DEBUG */
+		}
+	}
+
+	ecmp_group[ecmp_group_id].num_nhs ++;
+
+	memset(&arp, 0, sizeof(arp));
+	arp.ipAddr.addr[0] = dummy_nh_ipaddr + (__u32)ecmp_group[ecmp_group_id].num_nhs +
+			((__u32)ecmp_group[ecmp_group_id].hw_group_id << 8);
+	arp.ipAddr.isIPv6 = FALSE;
+	arp.interface = -1; /* my_iface[new_vlan]; */
+	arp.vlan = new_vlan;
+	arp.macAddr = new_dmac;
+#ifdef DEBUG
+	printf("%s: adding arp entry (0x%08x:0x%012llx:%u)\n",
+	       __func__, arp.ipAddr.addr[0], new_dmac, new_vlan);
+#endif /* DEBUG */
+	if((err = fmAddARPEntry(sw, &arp)) != FM_OK) {
+		return cleanup("fmAddARPEntry", err);
+		ecmp_group[ecmp_group_id].num_nhs --;
+		return err;
+	}
+
+	memset(&nh, 0, sizeof(nh));
+	nh.addr = arp.ipAddr;
+	/* nh.interfaceAddr = dummy_iface_addr; */
+	nh.vlan = new_vlan;
+	nh.trapCode = FM_TRAPCODE_L3_ROUTED_NO_ARP_0;
+
+#ifdef DEBUG
+	printf("%s: adding nh entry (0x%08x:%u) to group %u\n",
+	       __func__, nh.addr.addr[0], nh.vlan, ecmp_group_id);
+#endif /* DEBUG */
+	if((err = fmAddECMPGroupNextHops(sw, ecmp_group[ecmp_group_id].hw_group_id, 1, &nh)) != FM_OK) {
+		return cleanup("fmAddECMPGroupNextHops", err);
+		ecmp_group[ecmp_group_id].num_nhs --;
+	}
+
+	return err;
+}
+
+static fm_status switch_search_arp_entry(__u16 vlan, __u64 dmac, fm_arpEntry *parp)
+{
+	fm_status err = 0;
+	fm_voidptr ptr;
+
+	if ((err = fmGetARPEntryFirst(sw, &ptr, parp)) != FM_OK) {
+#ifdef DEBUG
+		printf("%s: fmGetARPEntryFirst() returns %d\n", __func__, err);
+#endif /* DEBUG */
+		return err;
+	}
+
+	if ((parp->macAddr == dmac) && (parp->vlan == vlan)) {
+#ifdef DEBUG
+		printf("%s: fmGetARPEntryFirst() found arp entry (0x%08x:0x%012llx:%u)\n",
+		       __func__, parp->ipAddr.addr[0], dmac, vlan);
+#endif /* DEBUG */
+		return err;
+	}
+
+	while (((err = fmGetARPEntryNext(sw, &ptr, parp)) == FM_OK) &&
+	       ((parp->macAddr != dmac) || (parp->vlan != vlan)));
+
+#ifdef DEBUG
+	if (err == FM_OK)
+		printf("%s: fmGetARPEntryNext() found arp entry (0x%08x:0x%012llx:%u)\n",
+		       __func__, parp->ipAddr.addr[0], dmac, vlan);
+	else
+		printf("%s: fmGetARPEntryNext() returns %d\n", __func__, err);
+#endif /* DEBUG */
+
+	return err;
+}
+
+int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action *actions)
+{
+	fm_status err = 0;
+	__u32 ecmp_group_id = 0;
+	__u64 new_dmac = 0;
+	__u16 new_vlan = 0;
+	fm_int hw_group_id = -1;
+	fm_nextHop nh;
+	fm_arpEntry arp;
+
+	ecmp_group_id = matches[0].v.u32.value_u32;
+	if(ecmp_group_id >= TABLE_NEXTHOP_SIZE) {
+		fprintf(stderr, "%s: invalid ecmp group id %d\n", __func__, ecmp_group_id);
+		return -EINVAL;
+	}
+#ifdef DEBUG
+	printf("%s: match EDMP_GROUP_ID: %d\n", __func__, ecmp_group_id);
+#endif /* DEBUG */
+	hw_group_id = ecmp_group[ecmp_group_id].hw_group_id;
+
+	new_dmac = actions[0].args[0].v.value_u64;
+	new_vlan = actions[0].args[1].v.value_u16;
+#ifdef DEBUG
+	printf("%s: action ROUTE(0x%012llx:%u)\n", __func__, new_dmac, new_vlan);
+#endif /* DEBUG */
+
+	if ((err = switch_search_arp_entry(new_vlan, new_dmac, &arp)) != FM_OK) {
+		fprintf(stderr, "%s: unable to find arp entry(dmac = 0x%12llx, vlan = %u)\n",
+			__func__, new_dmac, new_vlan);
+		return -ENOENT;
+	}
+
+#ifdef DEBUG
+	printf("%s: deleting arp entry (0x%08x:0x%012llx:%u)\n",
+	       __func__, arp.ipAddr.addr[0], new_dmac, new_vlan);
+#endif /* DEBUG */
+	if((err = fmDeleteARPEntry(sw, &arp)) != FM_OK) {
+		return cleanup("fmDeleteARPEntry", err);
+		return err;
+	}
+
+	memset(&nh, 0, sizeof(nh));
+	nh.addr = arp.ipAddr;
+	memset(&nh.interfaceAddr, 0, sizeof(nh.interfaceAddr));
+	/* nh.interfaceAddr = dummy_iface_addr; */
+	nh.vlan = new_vlan;
+	nh.trapCode = FM_TRAPCODE_L3_ROUTED_NO_ARP_0;
+
+#ifdef DEBUG
+	printf("%s: deleting nh entry (0x%08x:%u) from group %u\n",
+	       __func__, nh.addr.addr[0], nh.vlan, ecmp_group_id);
+#endif /* DEBUG */
+	if((err = fmDeleteECMPGroupNextHops(sw, hw_group_id, 1, &nh)) != FM_OK)
+		return cleanup("fmDeleteECMPGroupNextHops", err);
+
+	ecmp_group[ecmp_group_id].num_nhs --;
+#ifdef DEBUG
+	printf("%s: ecmp group %u has %d entries\n", __func__, ecmp_group_id, ecmp_group[ecmp_group_id].num_nhs);
+#endif /* DEBUG */
+
+#if 0
+	if (ecmp_group[ecmp_group_id].num_nhs == 0) {
+#ifdef DEBUG
+		printf("%s: deleting ecmp group %u\n", __func__, ecmp_group_id);
+#endif /* DEBUG */
+		if ((err = fmDeleteECMPGroup(sw, hw_group_id)) != FM_OK)
+			return cleanup("fmDeleteECMPGroup", err);
+
+		ecmp_group[ecmp_group_id].hw_group_id = -1;
+	}
+#endif /* 0 */
+
+	return err;
+}
+
+#ifdef VXLAN_MCAST
+static int switch_construct_mcast_group(fm_int *mcast_lport,
+					fm_int *mcast_group,
+					int num_mcast_listeners,
+					__unused struct my_mcast_listener *mcast_listeners)
+{
+	int i;
+	fm_status err = 0;
+	fm_bool l3switch_only = FM_ENABLED;
+	fm_mcastGroupListener *listeners;
+	size_t listeners_size;
+
+	listeners_size = sizeof(fm_mcastGroupListener) * (__u32)num_mcast_listeners;
+	if ((listeners = malloc(listeners_size)) == NULL) {
+		fprintf(stderr, "%s: unable to allocate listener list\n", __func__);
+		return -ENOMEM;
+	}
+	bzero(listeners, listeners_size);
+
+	if ((err = fmCreateMcastGroup(sw, mcast_group)) != FM_OK) {
+		cleanup("fmCreateMcastGroup", err);
+
+		goto done;
+	}
+
+	if ((err = fmSetMcastGroupAttribute(sw, *mcast_group, FM_MCASTGROUP_L3_SWITCHING_ONLY, &l3switch_only)) != FM_OK) {
+		cleanup("fmSetMcastGroupAttribute", err);
+
+		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+			cleanup("fmDeleteMcastGroup", err);
+			goto done;
+		}
+
+		goto done;
+	}
+
+	if ((err = fmActivateMcastGroup(sw, *mcast_group)) != FM_OK) {
+		cleanup("fmActivateMcastGroup", err);
+
+		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+			cleanup("fmDeleteMcastGroup", err);
+			goto done;
+		}
+
+		goto done;
+	}
+
+	if ((err = fmGetMcastGroupPort(sw, *mcast_group, mcast_lport)) != FM_OK) {
+		cleanup("fmGetMcastGroupPort", err);
+
+		if ((err = fmDeactivateMcastGroup(sw, *mcast_group)) != FM_OK) {
+			cleanup("fmDeactivateMcastGroup", err);
+			goto done;
+		}
+
+		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+			cleanup("fmDeleteMcastGroup", err);
+			goto done;
+		}
+
+		goto done;
+	}
+
+#ifdef DEBUG
+	printf("%s: create and activate mcast group %d lport %d\n", __func__, *mcast_group, *mcast_lport);
+#endif /* DEBUG */
+
+	for (i = 0; i < num_mcast_listeners; i++) {
+		switch(mcast_listeners[i].t) {
+		case FLOW_MCAST_LISTENER_PORT_VLAN:
+			listeners[i].listenerType = FM_MCAST_GROUP_LISTENER_PORT_VLAN;
+			listeners[i].info.portVlanListener.vlan = (fm_uint16)mcast_listeners[i].l.p.vlan;
+			listeners[i].info.portVlanListener.port = mcast_listeners[i].l.p.port;
+			break;
+		case FLOW_MCAST_LISTENER_FLOW_TUNNEL:
+			listeners[i].listenerType = FM_MCAST_GROUP_LISTENER_FLOW_TUNNEL;
+			listeners[i].info.flowListener.tableIndex = mcast_listeners[i].l.f.table;
+			listeners[i].info.flowListener.flowId = mcast_listeners[i].l.f.flow;
+			break;
+		default:
+			err = -EINVAL;
+			fprintf(stderr, "%s: unknown listener type %d\n", __func__, listeners[i].listenerType);
+			goto done;
+		}
+
+	}
+
+	if ((err = fmAddMcastGroupListenerListV2(sw, *mcast_group, num_mcast_listeners, listeners)!= FM_OK)) {
+		cleanup("fmCreateMcastGroup", err);
+
+		if ((err = fmDeactivateMcastGroup(sw, *mcast_group)) != FM_OK) {
+			cleanup("fmDeactivateMcastGroup", err);
+			goto done;
+		}
+
+		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+			cleanup("fmDeleteMcastGroup", err);
+			goto done;
+		}
+
+		goto done;
+	}
+
+#ifdef DEBUG
+	printf("%s: add %d listeners to  mcast group %d\n", __func__, num_mcast_listeners, *mcast_group);
+#endif /* DEBUG */
+
+done:
+	free(listeners);
+
+	return err;
+}
+#endif /* VXLAN_MCAST */
+
+int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, struct net_mat_field_ref *matches, struct net_mat_action *actions)
+{
+	int i;
+	fm_status err = 0;
+	fm_flowCondition cond = 0;
+	fm_flowValue condVal;
+	fm_flowAction act = 0;
+	fm_flowParam param;
+	__u32 group_id;
+#ifdef VXLAN_MCAST
+	struct my_mcast_listener mcast_listeners[MAX_LISTENERS_PER_GROUP];
+	int num_mcast_listeners = 0;
+	fm_int mcast_lport;
+	fm_int mcast_group = -1;
+#endif /* VXLAN_MCAST */
+
+	memset(&condVal, 0, sizeof(condVal));
+	memset(&param, 0, sizeof(param));
+
+	for (i = 0; matches && matches[i].instance; i++) {
+		switch (matches[i].instance) {
+		case HEADER_INSTANCE_ETHERNET:
+			switch(matches[i].field) {
+			case HEADER_ETHERNET_SRC_MAC:
+				cond |= FM_FLOW_MATCH_SRC_MAC;
+				condVal.src = matches[i].v.u64.value_u64;
+				condVal.srcMask = matches[i].v.u64.mask_u64;
+#ifdef DEBUG
+				printf("%s: match SRC_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.src, condVal.srcMask);
+#endif /* DEBUG */
+				break;
+			case HEADER_ETHERNET_DST_MAC:
+				cond |= FM_FLOW_MATCH_DST_MAC;
+				condVal.dst = matches[i].v.u64.value_u64;
+				condVal.dstMask = matches[i].v.u64.mask_u64;
+#ifdef DEBUG
+				printf("%s: match DST_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.dst, condVal.dstMask);
+#endif /* DEBUG */
+				break;
+			case HEADER_ETHERNET_ETHERTYPE:
+				cond |= FM_FLOW_MATCH_ETHERTYPE;
+				condVal.ethType = matches[i].v.u16.value_u16;
+				condVal.ethTypeMask = matches[i].v.u16.mask_u16;
+#ifdef DEBUG
+				printf("%s: match ETHERTYPE(0x%04x:0x%04x)\n", __func__, condVal.ethType, condVal.ethTypeMask);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_ETHERNET, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_VLAN_OUTER:
+			switch(matches[i].field) {
+			case HEADER_VLAN_VID:
+				cond |= FM_FLOW_MATCH_VLAN;
+				condVal.vlanId = matches[i].v.u16.value_u16;
+				condVal.vlanIdMask = matches[i].v.u16.mask_u16;
+#ifdef DEBUG
+				printf("%s: match VLAN(0x%04x:0x%04x)\n", __func__, condVal.vlanId, condVal.vlanIdMask);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_VLAN_OUTER, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_IPV4:
+			switch(matches[i].field) {
+			case HEADER_IPV4_SRC_IP:
+				cond |= FM_FLOW_MATCH_SRC_IP;
+				condVal.srcIp.addr[0] = matches[i].v.u32.value_u32;
+				condVal.srcIp.isIPv6 = FALSE;
+				condVal.srcIpMask.addr[0] = matches[i].v.u32.mask_u32;
+				condVal.srcIpMask.isIPv6 = FALSE;
+#ifdef DEBUG
+				printf("%s: match SRC_IP(0x%08x:0x%08x)\n", __func__, condVal.srcIp.addr[0], condVal.srcIpMask.addr[0]);
+#endif /* DEBUG */
+
+				break;
+			case HEADER_IPV4_DST_IP:
+				cond |= FM_FLOW_MATCH_DST_IP;
+				condVal.dstIp.addr[0] = matches[i].v.u32.value_u32;
+				condVal.dstIp.isIPv6 = FALSE;
+				condVal.dstIpMask.addr[0] = matches[i].v.u32.mask_u32;
+				condVal.dstIpMask.isIPv6 = FALSE;
+#ifdef DEBUG
+				printf("%s: match DST_IP(0x%08x:0x%08x)\n", __func__, condVal.dstIp.addr[0], condVal.dstIpMask.addr[0]);
+#endif /* DEBUG */
+
+				break;
+			case HEADER_IPV4_PROTOCOL:
+				cond |= FM_FLOW_MATCH_PROTOCOL;
+				condVal.protocol = (fm_byte)matches[i].v.u16.value_u16;
+				condVal.protocolMask = (fm_byte)matches[i].v.u16.mask_u16;
+#ifdef DEBUG
+				printf("%s: match PROTOCOL(0x%08x:0x%08x)\n", __func__, condVal.protocol, condVal.protocolMask);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_IPV4, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_TCP:
+		case HEADER_INSTANCE_UDP:
+			/* Configure protocool as required by fmAPI */
+			cond |= FM_FLOW_MATCH_PROTOCOL;
+			condVal.protocolMask = 0xff;
+			if (matches[i].instance == HEADER_INSTANCE_TCP)
+				condVal.protocol = 0x06;
+			else
+				condVal.protocol = 0x11;
+
+			switch(matches[i].field) {
+			case HEADER_TCP_SRC_PORT:
+				cond |= FM_FLOW_MATCH_L4_SRC_PORT;
+				condVal.L4SrcStart = matches[i].v.u16.value_u16;
+#ifdef DEBUG
+				printf("%s: match L4_SRC_PORT(%d)\n", __func__, condVal.L4SrcStart);
+#endif /* DEBUG */
+				break;
+			case HEADER_TCP_DST_PORT:
+				cond |= FM_FLOW_MATCH_L4_DST_PORT;
+				condVal.L4DstStart = matches[i].v.u16.value_u16;
+#ifdef DEBUG
+				printf("%s: match L4_DST_PORT(%d)\n", __func__, condVal.L4DstStart);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_TCP/UDP, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_INGRESS_PORT_METADATA:
+			switch(matches[i].field) {
+			case HEADER_METADATA_INGRESS_PORT:
+				cond |= FM_FLOW_MATCH_SRC_PORT;
+				condVal.logicalPort = (fm_int)matches[i].v.u32.value_u32;
+#ifdef DEBUG
+				printf("%s: match SRC_PORT(%d)\n", __func__, condVal.logicalPort);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_INGRESS_PORT_METADATA, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		default:
+			fprintf(stderr, "%s: match error unsupported instance %d\n", __func__, matches[i].instance);
+			err = -EINVAL;
+			break;
+		}
+	}
+
+	for (i = 0; actions && actions[i].uid; i++) {
+		switch(actions[i].uid) {
+		case ACTION_FORWARD_VSI:
+			act |= FM_FLOW_ACTION_FORWARD;
+			param.logicalPort = pci_to_lport(
+					actions[i].args[0].v.value_u8,
+					actions[i].args[1].v.value_u8,
+					actions[i].args[2].v.value_u8);
+			if (param.logicalPort < 0) {
+				fprintf(stderr, "Error: pci to log port\n");
+				err = -EINVAL;
+				break;
+			}
+#ifdef VXLAN_MCAST
+			if (num_mcast_listeners >= MAX_LISTENERS_PER_GROUP) {
+				fprintf(stderr, "%s: too many destinations\n", __func__);
+				err = -EINVAL;
+				break;
+			}
+
+			mcast_listeners[num_mcast_listeners].t = FLOW_MCAST_LISTENER_PORT_VLAN;
+			mcast_listeners[num_mcast_listeners].l.p.vlan = FM_DEFAULT_VLAN; // FIXME: need VLAN management
+			mcast_listeners[num_mcast_listeners].l.p.port = param.logicalPort;
+
+			num_mcast_listeners++;
+#endif /* VXLAN_MCAST */
+#ifdef DEBUG
+			printf("%s: action FORWARD_VSI(%d)\n", __func__, param.logicalPort);
+#endif
+			break;
+		case ACTION_SET_EGRESS_PORT:
+			act |= FM_FLOW_ACTION_FORWARD;
+			param.logicalPort = (fm_int)actions[i].args[0].v.value_u32;
+#ifdef VXLAN_MCAST
+			if (num_mcast_listeners >= MAX_LISTENERS_PER_GROUP) {
+				fprintf(stderr, "%s: too many destinations\n", __func__);
+				err = -EINVAL;
+				break;
+			}
+
+			mcast_listeners[num_mcast_listeners].t = FLOW_MCAST_LISTENER_PORT_VLAN;
+			mcast_listeners[num_mcast_listeners].l.p.vlan = FM_DEFAULT_VLAN; // FIXME: need VLAN management
+			mcast_listeners[num_mcast_listeners].l.p.port = param.logicalPort;
+
+			num_mcast_listeners++;
+#endif /* VXLAN_MCAST */
+#ifdef DEBUG
+			printf("%s: action FORWARD(%d)\n", __func__, param.logicalPort);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_DST_MAC:
+			act |= FM_FLOW_ACTION_SET_DMAC;
+			param.dmac = actions[i].args[0].v.value_u64;
+#ifdef DEBUG
+			printf("%s: action SET_DMAC(0x%012llx)\n", __func__, param.dmac);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_SRC_MAC:
+			act |= FM_FLOW_ACTION_SET_SMAC;
+			param.smac = actions[i].args[0].v.value_u64;
+#ifdef DEBUG
+			printf("%s: action SET_SMAC(0x%012llx)\n", __func__, param.smac);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_VLAN:
+			act |= FM_FLOW_ACTION_SET_VLAN;
+			param.vlan = actions[i].args[0].v.value_u16;
+#ifdef DEBUG
+			printf("%s: action SET_VLAN(%d)\n", __func__, param.vlan);
+#endif /* DEBUG */
+			break;
+		case ACTION_NORMAL:
+			act |= FM_FLOW_ACTION_FORWARD_NORMAL;
+#ifdef DEBUG
+			printf("%s: action FORWARD_NORMAL\n", __func__);
+#endif /* DEBUG */
+			break;
+		case ACTION_TRAP:
+			act |= FM_FLOW_ACTION_TRAP;
+#ifdef DEBUG
+			printf("%s: action TRAP\n", __func__);
+#endif /* DEBUG */
+			break;
+		case ACTION_DROP_PACKET:
+			act |= FM_FLOW_ACTION_DROP;
+#ifdef DEBUG
+			printf("%s: action DROP\n", __func__);
+#endif /* DEBUG */
+			break;
+		case ACTION_COUNT:
+			act |= FM_FLOW_ACTION_COUNT;
+#ifdef DEBUG
+			printf("%s: action COUNT\n", __func__);
+#endif /* DEBUG */
+			break;
+		case ACTION_ROUTE_VIA_ECMP:
+			act |= FM_FLOW_ACTION_ROUTE;
+			group_id = actions[i].args[0].v.value_u32;
+#ifdef DEBUG
+			printf("%s: action ROUTE(%d)\n", __func__, group_id);
+#endif /* DEBUG */
+			if (group_id >= TABLE_NEXTHOP_SIZE) {
+				fprintf(stderr, "%s: action route_via_ecmp ecmp group id %d out of range\n",
+					__func__, group_id);
+				err = -EINVAL;
+			} else if (ecmp_group[group_id].hw_group_id == -1) {
+				fprintf(stderr, "%s: no nexthop entry for ecmp group %d\n",
+					__func__, group_id);
+				err = -EINVAL;
+			} else {
+				param.ecmpGroup = ecmp_group[group_id].hw_group_id;
+#ifdef DEBUG
+				printf("%s: action ROUTE(%d) hw_group_id %d\n",
+				       __func__, group_id, param.ecmpGroup);
+#endif /* DEBUG */
+			}
+
+			break;
+		case ACTION_FORWARD_TO_TE_A:
+		case ACTION_FORWARD_TO_TE_B:
+			act |= FM_FLOW_ACTION_REDIRECT_TUNNEL;
+			param.tableIndex = (fm_int)actions[i].args[0].v.value_u16 - TABLE_DYN_START + 1;
+			param.flowId = 0;
+#ifdef DEBUG
+			printf("%s: action FORWARD_TO_TE(%d)\n", __func__, param.tableIndex);
+#endif /* DEBUG */
+			break;
+		case ACTION_FORWARD_DIRECT_TO_TE_A:
+		case ACTION_FORWARD_DIRECT_TO_TE_B:
+			act |= FM_FLOW_ACTION_REDIRECT_TUNNEL;
+			param.tableIndex = (fm_int)actions[i].args[0].v.value_u16 - TABLE_DYN_START + 1;
+			param.flowId = (fm_int)actions[i].args[1].v.value_u16;
+#ifdef VXLAN_MCAST
+			if (num_mcast_listeners >= MAX_LISTENERS_PER_GROUP) {
+				fprintf(stderr, "%s: too many destinations\n", __func__);
+				err = -EINVAL;
+				break;
+			}
+
+			mcast_listeners[num_mcast_listeners].t = FLOW_MCAST_LISTENER_FLOW_TUNNEL;
+			mcast_listeners[num_mcast_listeners].l.f.table = param.tableIndex;
+			mcast_listeners[num_mcast_listeners].l.f.flow = param.flowId;
+
+			num_mcast_listeners++;
+#endif /* VXLAN_MCAST */
+#ifdef DEBUG
+			printf("%s: action FORWARD_DIRECT_TO_TE(%d, %d)\n", __func__, param.tableIndex, param.flowId);
+#endif /* DEBUG */
+			break;
+		default:
+			fprintf(stderr, "%s: unsupported action %d\n", __func__, actions[i].uid);
+			err = -EINVAL;
+			break;
+		}
+	}
+		
+	if (err < 0)
+		return err;
+
+#ifdef VXLAN_MCAST
+	if (num_mcast_listeners > 1) {
+		if ((err = switch_construct_mcast_group(&mcast_lport, &mcast_group, num_mcast_listeners, mcast_listeners)) < 0) {
+			fprintf(stderr, "%s: error constructing multicast group %d\n", __func__, err);
+			return err;
+		}
+
+		act &= ~FM_FLOW_ACTION_REDIRECT_TUNNEL;
+		act |= FM_FLOW_ACTION_FORWARD;
+
+		param.logicalPort = mcast_lport;
+	}
+#endif /* VXLAN_MCAST */
+#ifdef DEBUG
+	printf("%s: add flow : table %d, cond 0x%llx, act 0x%llx\n",
+	       __func__, table_id, cond, act);
+#endif /* DEBUG */
+	if((err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
+			cond, &condVal, act, &param, FM_FLOW_STATE_ENABLED,
+			(int *)flowid)) != FM_OK) {
+		return cleanup("fmAddFlow", err);
+	}
+#ifdef DEBUG
+	else
+		printf("%s: flow flowid %d added to table %d\n", __func__, *flowid, table_id);
+#endif /* DEBUG */
+
+#ifdef VXLAN_MCAST
+	if (num_mcast_listeners > 1 && mcast_group != -1) {
+		match_mcast_group[*flowid] = mcast_group;
+	}
+#endif /* VXLAN_MCAST */
+
+	return 0;
+}
+
+int switch_del_TCAM_rule_entry(__u32 flowid, __u32 switch_table_id)
+{
+	fm_status err = 0;
+#ifdef VXLAN_MCAST
+	fm_int mcast_group = -1;
+#endif /* VXLAN_MCAST */
+
+#ifdef DEBUG
+	printf("%s: deleting flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
+#endif /* DEBUG */
+	if((err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid)) != FM_OK) {
+		return cleanup("fmDeleteFlow", err);
+	}
+
+#ifdef VXLAN_MCAST
+	if (match_mcast_group[flowid] != -1) {
+		mcast_group = match_mcast_group[flowid];
+
+		match_mcast_group[flowid] = -1;
+
+		if ((err = fmDeactivateMcastGroup(sw, mcast_group)) != FM_OK) {
+			return cleanup("fmDeactivateMcastGroup", err);
+		}
+
+		if ((err = fmDeleteMcastGroup(sw, mcast_group)) != FM_OK) {
+			return cleanup("fmDeleteMcastGroup", err);
+		}
+
+	}
+#endif /* VXLAN_MCAST */
+
+	return 0;
+}
+
+int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *matches, __u32 *actions, __u32 size, int max_actions)
+{
+	fm_status err = 0;
+	fm_flowCondition condition = 0;
+	int te_direct = FALSE;
+	int te_encap = FALSE;
+	int te_decap = FALSE;
+	int i;
+	for (i = 0; matches && matches[i].instance; i++) {
+		switch (matches[i].instance) {
+		case HEADER_INSTANCE_VXLAN:
+			switch(matches[i].field) {
+			case HEADER_VXLAN_VNI:
+				condition |= FM_FLOW_MATCH_VNI;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_VXLAN, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_ETHERNET:
+			switch(matches[i].field) {
+			case HEADER_ETHERNET_SRC_MAC:
+				condition |= FM_FLOW_MATCH_SRC_MAC;
+				break;
+			case HEADER_ETHERNET_DST_MAC:
+				condition |= FM_FLOW_MATCH_DST_MAC;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_ETHERNET, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_IPV4:
+			switch(matches[i].field) {
+			case HEADER_IPV4_SRC_IP:
+				condition |= FM_FLOW_MATCH_SRC_IP;
+				break;
+			case HEADER_IPV4_DST_IP:
+				condition |= FM_FLOW_MATCH_DST_IP;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_UDP:
+			switch(matches[i].field) {
+			case HEADER_UDP_SRC_PORT:
+				condition |= FM_FLOW_MATCH_L4_SRC_PORT;
+				break;
+			case HEADER_UDP_DST_PORT:
+				condition |= FM_FLOW_MATCH_L4_DST_PORT;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_UDP, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_TCP:
+			switch(matches[i].field) {
+			case HEADER_TCP_SRC_PORT:
+				condition |= FM_FLOW_MATCH_L4_SRC_PORT;
+				break;
+			case HEADER_TCP_DST_PORT:
+				condition |= FM_FLOW_MATCH_L4_DST_PORT;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_TCP, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_DIRECT_INDEX_METADATA:
+			switch(matches[i].field) {
+			case HEADER_METADATA_DIRECT_INDEX:
+				te_direct = TRUE;
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_DIRECT_INDEX_METADATA, field=%d\n",
+				        __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		default:
+			fprintf(stderr, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
+			err = -EINVAL;
+			break;
+		}
+	}
+
+	if (te_direct && (condition != 0)) {
+		fprintf(stderr, "%s: direct flow table can not have match conditions\n", __func__);
+		err = -EINVAL;
+	}
+
+	if (err == -EINVAL)
+		return err;
+
+	for (i = 0; actions && actions[i]; i++) {
+		printf("actions[%d] = %d\n", i, actions[i]);
+		switch(actions[i]) {
+		case ACTION_TUNNEL_DECAP:
+			te_decap = TRUE;
+			break;
+		case ACTION_TUNNEL_ENCAP:
+			te_encap = TRUE;
+			break;
+		}
+	}
+
+	if (te_encap && te_decap) {
+		fprintf(stderr, "%s: a te flow table can not have both encap and decap actions\n", __func__);
+		err = -EINVAL;
+	}
+
+	if(!te_encap && !te_decap) {
+#ifdef DEBUG
+		printf("%s: TE table has neither encap nor decap action, default to encap\n", __func__);
+#endif /* DEBUG */
+		te_encap = TRUE;
+	}
+
+	if (err == -EINVAL)
+		return err;
+
+	/* condition = FM_FLOW_TABLE_COND_ALL_12_TUPLE; */
+
+#ifdef DEBUG
+	printf("%s: setting flow table attribute FM_FLOW_TABLE_TUNNEL_ENGINE %d\n", __func__, te);
+#endif /* DEBUG */
+	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_TUNNEL_ENGINE, &te);
+	if(err != FM_OK)
+		return cleanup("fmSetFlowAttribute", err);
+
+#ifdef DEBUG
+	printf("%s: setting flow table attribute FM_FLOW_TABLE_TUNNEL_ENCAP %d\n", __func__, te_encap);
+#endif /* DEBUG */
+	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_TUNNEL_ENCAP, &te_encap);
+	if(err != FM_OK)
+		return cleanup("fmSetFlowAttribute", err);
+
+#ifdef DEBUG
+	printf("%s: creating flow TE table: table %d, direct %d, condition 0x%llx, maxEntries %d, maxActions %d\n",
+	       __func__, table_id, te_direct, condition, size, max_actions);
+#endif /* DEBUG */
+
+	err = fmCreateFlowTETable(sw, (fm_int)table_id, condition, size, (fm_uint32)max_actions);
+	if(err != FM_OK)
+		return cleanup("fmCreateFlowTETable", err);
+
+	return 0;
+}
+
+int switch_del_TE_table(__u32 table_id)
+{
+	fm_status err = 0;
+
+#ifdef DEBUG
+	printf("%s: deleting flow TE table %d\n", __func__, table_id);
+#endif /* DEBUG */
+	if((err = fmDeleteFlowTETable(sw, (int)table_id)) != FM_OK)
+		return cleanup("fmDeleteFlowTETable", err);
+
+	return 0;
+}
+
+int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, struct net_mat_field_ref *matches, struct net_mat_action *actions)
+{
+	int i;
+	fm_status err = 0;
+	fm_flowCondition cond = 0;
+	fm_flowValue condVal;
+	fm_flowAction act = 0;
+	fm_flowParam param;
+#ifdef DEBUG
+	__u16 direct_idx = 0;
+#endif
+
+	memset(&condVal, 0, sizeof(condVal));
+	memset(&param, 0, sizeof(param));
+
+	for (i = 0; matches && matches[i].instance; i++) {
+		switch (matches[i].instance) {
+		case HEADER_INSTANCE_VXLAN:
+			switch(matches[i].field) {
+			case HEADER_VXLAN_VNI:
+				cond |= FM_FLOW_MATCH_VNI;
+				condVal.vni = matches[i].v.u32.value_u32;
+#ifdef DEBUG
+				printf("%s: match VNI(%d)\n", __func__, condVal.vni);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_VXLAN, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_ETHERNET:
+			switch(matches[i].field) {
+			case HEADER_ETHERNET_SRC_MAC:
+				cond |= FM_FLOW_MATCH_SRC_MAC;
+				condVal.src = matches[i].v.u64.value_u64;
+				condVal.srcMask = matches[i].v.u64.mask_u64;
+#ifdef DEBUG
+				printf("%s: match SRC_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.src, condVal.srcMask);
+#endif /* DEBUG */
+				break;
+			case HEADER_ETHERNET_DST_MAC:
+				cond |= FM_FLOW_MATCH_DST_MAC;
+				condVal.dst = matches[i].v.u64.value_u64;
+				condVal.dstMask = matches[i].v.u64.mask_u64;
+#ifdef DEBUG
+				printf("%s: match DST_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.dst, condVal.dstMask);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_ETHERNET, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_IPV4:
+			switch(matches[i].field) {
+			case HEADER_IPV4_SRC_IP:
+				cond |= FM_FLOW_MATCH_SRC_IP;
+				condVal.srcIp.addr[0] = matches[i].v.u32.value_u32;
+				condVal.srcIp.isIPv6 = FALSE;
+				condVal.srcIpMask.addr[0] = matches[i].v.u32.mask_u32;
+				condVal.srcIpMask.isIPv6 = FALSE;
+#ifdef DEBUG
+				printf("%s: match SRC_IP(0x%08x:0x%08x)\n", __func__, condVal.srcIp.addr[0], condVal.srcIpMask.addr[0]);
+#endif /* DEBUG */
+
+				break;
+			case HEADER_IPV4_DST_IP:
+				cond |= FM_FLOW_MATCH_DST_IP;
+				condVal.dstIp.addr[0] = matches[i].v.u32.value_u32;
+				condVal.dstIp.isIPv6 = FALSE;
+				condVal.dstIpMask.addr[0] = matches[i].v.u32.mask_u32;
+				condVal.dstIpMask.isIPv6 = FALSE;
+#ifdef DEBUG
+				printf("%s: match DST_IP(0x%08x:0x%08x)\n", __func__, condVal.dstIp.addr[0], condVal.dstIpMask.addr[0]);
+#endif /* DEBUG */
+
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_IPV4, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_TCP:
+		case HEADER_INSTANCE_UDP:
+			switch(matches[i].field) {
+			case HEADER_TCP_SRC_PORT:
+				cond |= FM_FLOW_MATCH_L4_SRC_PORT;
+				condVal.L4SrcStart = matches[i].v.u16.value_u16;
+#ifdef DEBUG
+				printf("%s: match L4_SRC_PORT(%d)\n", __func__, condVal.L4SrcStart);
+#endif /* DEBUG */
+				break;
+			case HEADER_TCP_DST_PORT:
+				cond |= FM_FLOW_MATCH_L4_DST_PORT;
+				condVal.L4DstStart = matches[i].v.u16.value_u16;
+#ifdef DEBUG
+				printf("%s: match L4_DST_PORT(%d)\n", __func__, condVal.L4DstStart);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_INSTANCE_TCP/UDP, field=%d\n", __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		case HEADER_INSTANCE_DIRECT_INDEX_METADATA:
+			switch(matches[i].field) {
+			case HEADER_METADATA_DIRECT_INDEX:
+#ifdef DEBUG
+				direct_idx = matches[i].v.u16.value_u16;
+				printf("%s: match HEADER_METADATA_DIRECT_INDEX(%d)\n", __func__, direct_idx);
+#endif /* DEBUG */
+				break;
+			default:
+				fprintf(stderr, "%s: match error in HEADER_DIRECT_INDEX_METADATA, field=%d\n",
+				        __func__, matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
+		default:
+			fprintf(stderr, "%s: match error unsupported instance %d\n", __func__, matches[i].instance);
+			err = -EINVAL;
+			break;
+		}
+	}
+
+	for (i = 0; actions && actions[i].uid; i++) {
+		switch(actions[i].uid) {
+		case ACTION_TUNNEL_ENCAP:
+			act |= FM_FLOW_ACTION_ENCAP_SIP |
+#if 0
+			       FM_FLOW_ACTION_ENCAP_TTL |
+#endif /* 0 */
+			       FM_FLOW_ACTION_ENCAP_L4SRC |
+			       FM_FLOW_ACTION_ENCAP_L4DST |
+			       FM_FLOW_ACTION_ENCAP_VNI;
+
+			param.tunnelType = FM_TUNNEL_TYPE_VXLAN;
+			param.outerDip.addr[0] = actions[i].args[0].v.value_u32;
+			param.outerSip.addr[0] = actions[i].args[1].v.value_u32;
+			param.outerVni = actions[i].args[2].v.value_u32;
+			param.outerL4Src = actions[i].args[3].v.value_u16;
+			param.outerL4Dst = actions[i].args[4].v.value_u16;
+#ifdef DEBUG
+			printf("%s: action TUNNEL_ENCAP(0x%08x,0x%08x,%d,%d,%d)\n", __func__,
+			       param.outerDip.addr[0],
+			       param.outerSip.addr[0],
+			       param.outerVni,
+			       param.outerL4Src,
+			       param.outerL4Dst);
+#endif /* DEBUG */
+			break;
+		case ACTION_TUNNEL_DECAP:
+#ifdef DEBUG
+			printf("%s: action TUNNEL_DECAP\n", __func__); 
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_EGRESS_PORT:
+			act |= FM_FLOW_ACTION_FORWARD;
+			param.logicalPort = (fm_int)actions[i].args[0].v.value_u32;
+#ifdef DEBUG
+			printf("%s: action FORWARD(%d)\n", __func__, param.logicalPort);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_DST_MAC:
+			act |= FM_FLOW_ACTION_SET_DMAC;
+			param.dmac = actions[i].args[0].v.value_u64;
+#ifdef DEBUG
+			printf("%s: action SET_DMAC(0x%012llx)\n", __func__, param.dmac);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_SRC_MAC:
+			act |= FM_FLOW_ACTION_SET_SMAC;
+			param.smac = actions[i].args[0].v.value_u64;
+#ifdef DEBUG
+			printf("%s: action SET_SMAC(0x%012llx)\n", __func__, param.smac);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_IPV4_DST_IP:
+			act |= FM_FLOW_ACTION_SET_DIP;
+			param.dip.addr[0] = actions[i].args[0].v.value_u32;
+#ifdef DEBUG
+			printf("%s: action SET_DIP(0x%08x)\n", __func__, param.dip.addr[0]);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_IPV4_SRC_IP:
+			act |= FM_FLOW_ACTION_SET_SIP;
+			param.sip.addr[0] = actions[i].args[0].v.value_u32;
+#ifdef DEBUG
+			printf("%s: action SET_SIP(0x%08x)\n", __func__, param.sip.addr[0]);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_TCP_DST_PORT:
+		case ACTION_SET_UDP_DST_PORT:
+			act |= FM_FLOW_ACTION_SET_L4DST;
+			param.l4Dst = actions[i].args[0].v.value_u16;
+#ifdef DEBUG
+			printf("%s: action SET_L4DST(%d)\n", __func__, param.l4Dst);
+#endif /* DEBUG */
+			break;
+		case ACTION_SET_TCP_SRC_PORT:
+		case ACTION_SET_UDP_SRC_PORT:
+			act |= FM_FLOW_ACTION_SET_L4SRC;
+			param.l4Src = actions[i].args[0].v.value_u16;
+#ifdef DEBUG
+			printf("%s: action SET_L4SRC(%d)\n", __func__, param.l4Src);
+#endif /* DEBUG */
+			break;
+		case ACTION_COUNT:
+			act |= FM_FLOW_ACTION_COUNT;
+#ifdef DEBUG
+			printf("%s: action COUNT\n", __func__);
+#endif /* DEBUG */
+			break;
+		default:
+			fprintf(stderr, "%s: unsupported action %d\n", __func__, actions[i].uid);
+			err = -EINVAL;
+			break;
+		}
+	}
+
+	if (err == -EINVAL)
+		return err;
+
+#ifdef DEBUG
+	printf("%s: add TE flow : table %d, cond 0x%llx, act 0x%llx\n",
+	       __func__, table_id, cond, act);
+#endif /* DEBUG */
+	if((err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
+			cond, &condVal, act, &param, FM_FLOW_STATE_ENABLED,
+			(int *)flowid)) != FM_OK) {
+		return cleanup("fmAddFlow", err);
+	}
+#ifdef DEBUG
+	else
+		printf("%s: flow flowid %d added to table %d\n", __func__, *flowid, table_id);
+#endif /* DEBUG */
+
+	return 0;
+}
+
+int switch_del_TE_rule_entry(__u32 flowid, __u32 switch_table_id)
+{
+	fm_status err = 0;
+
+#ifdef DEBUG
+	printf("%s: deleting TE flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
+#endif /* DEBUG */
+	if((err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid)) != FM_OK) {
+		return cleanup("fmDeleteFlow", err);
+	}
+
+	return 0;
+}
+
+int switch_add_L2MP_rule_entry(struct net_mat_field_ref *matches,
+			       struct net_mat_action *actions)
+{
+	fm_LBGDistributionMapRange range;
+	fm_int lbg, state, i;
+	fm_LBGParams params;
+	fm_status err;
+	fm_int *ports;
+	fm_int bins = 0;
+	__u32 group;
+
+	switch (matches[0].instance) {
+	case HEADER_INSTANCE_L2_MP_METADATA:
+			group = matches[0].v.u32.value_u32;
+			break;
+	default:
+		return -EINVAL;
+	}
+
+	if (group >=  TABLE_L2_MP_SIZE)
+		return -EINVAL;
+
+	if (l2mp_group[group] != -1)
+		return -EEXIST;
+
+	for (i = 0; actions[0].args[i].type; i++)
+		bins++;
+
+	memset(&params, 0, sizeof(params));
+	params.numberOfBins = bins;
+	params.mode = FM_LBG_MODE_MAPPED_L234HASH;
+
+	err = fmCreateLBGExt(sw, &lbg, &params);
+	if (err != FM_OK)
+		return cleanup("fmCreateLBGExt", err);
+
+	ports = calloc((size_t)bins, sizeof(fm_int));
+	if (!ports)
+		return -ENOMEM;
+
+	for (i = 0; actions[0].args && actions[0].args[i].type; i++)
+		ports[i] = (int)actions[0].args[i].v.value_u32;
+
+	range.ports = ports;
+	range.firstBin = 0;
+	range.numberOfBins = bins;
+
+	err = fmSetLBGAttribute(sw, lbg, FM_LBG_DISTRIBUTION_MAP_RANGE, &range);
+	free(ports);
+	if (err != FM_OK)
+		return cleanup("fmSetLBGAttribute", err);
+
+	state = FM_LBG_STATE_ACTIVE;
+	err = fmSetLBGAttribute(sw, lbg, FM_LBG_STATE, &state);
+	if (err != FM_OK)
+		return cleanup("fmSetLBGAttribute", err);
+
+	l2mp_group[group] = lbg;
+	return 0;
+}
+
+int switch_del_L2MP_rule_entry(struct net_mat_field_ref *matches)
+{
+	fm_status err;
+	__u32 group;
+	fm_int lbg;
+
+	switch (matches[0].instance) {
+	case HEADER_INSTANCE_L2_MP_METADATA:
+			group = matches[0].v.u32.value_u32;
+			break;
+	default:
+		return -EINVAL;
+	}
+
+	if (group >=  TABLE_L2_MP_SIZE)
+		return -EINVAL;
+
+	if (l2mp_group[group] == -1)
+		return -EINVAL;
+
+	lbg = l2mp_group[group];
+	err = fmDeleteLBG(sw, lbg);
+	if (err != FM_OK)
+		return cleanup("fmDeleteLBG", err);
+
+	l2mp_group[group] = -1;
+	return 0;
+}

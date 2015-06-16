@@ -1,0 +1,118 @@
+.\" Header and footer
+.TH "MATCH\-CREATE" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-create \- Create a match action table
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch create\fR \-f <family> \-p <pid> [\-g] [\-h] [\-i ifname]
+            source <source> name <name> [id <id>] size <size>
+            match <MATCH> [match <MATCH>...]
+            action <ACTION> [action <ACTION>...]
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Send a command instructing a match action table (MAT) daemon to create a match action table.
+.sp
+The functionality of the new table is based on the source table.  For instance, a new TCAM table must use the TCAM table as its source table.
+.sp
+The options are not positional, but the keyword to describe the option, e.g. "match", is required.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MAT daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the MATCH daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+source <source>
+.RS 4
+The parent table id.
+.RE
+
+.br
+name <name>
+.RS 4
+The name of the new table.
+.RE
+
+.br
+id <id>
+.RS 4
+The id of the new table.
+.RE
+
+.br
+size <size>
+.RS 4
+The maximum number of rules the new table can support.
+.RE
+
+.br
+match <MATCH>
+.RS 4
+The matches supported by the new table.
+.br
+The specified matches must be a subset of the source table's matches.
+.br
+If no matches are specified, the new table will support the same matches as the source table.
+.sp
+A match is defined as follows.
+.RS 2
+MATCH           : HEADER_INSTANCE.FIELD MASK_TYPE
+.br
+HEADER_INSTANCE : string (e.g. ethernet)
+.br
+FIELD           : string (e.g. dst_mac)
+.br
+MASK_TYPE       : lpm|exact
+.br
+.RE
+For Example: match ethernet.dst_mac exact
+.RE
+
+.br
+action <ACTION>
+.RS 4
+The actions supported by the new table.
+.br
+The specified actions must be a subset of the source table's actions.
+.br
+If no actions are specified, the new table will support the same actions as the source table.
+.sp
+An action is defined as follows.
+.RS 2
+ACTION : string (e.g. set_egress_port)
+.RE
+.RE

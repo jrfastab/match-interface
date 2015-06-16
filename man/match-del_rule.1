@@ -1,0 +1,62 @@
+.\" Header and footer
+.TH "MATCH\-DEL_RULE" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-del_rule \- Delete an existing rule from a table
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch del_rule\fR \-f <family> \-p <pid> [\-g] [\-h] [\-i ifname]
+              handle <handle> table <table>
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Send a command instructing a MATCH daemon to delete a rule from a match action table.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MATCH daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the MATCH daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+handle <handle>
+.RS 4
+The id of the rule to delete.
+.RE
+
+.br
+table <table>
+.RS 4
+The table id from which to delete the rule.
+.RE

@@ -1,0 +1,117 @@
+.\" Header and footer
+.TH "MATCH" "1" "" "match action table configuration tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match \- A command line utility to interact with a MATCH daemon (matchd)
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch\fR \-f <family> \-p <pid> [\-g] [\-h] [\-i ifname]
+     <command> [<args>]
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+match  is a command line utility used to interact with a match action tables (MAT) daemon.
+.sp
+The match tool issues commands to query the state of match action tables, create and destroy match action tables, and to add and delete rules from said tables.
+
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MAT daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the match action tables daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.\" Commands
+.SH MATCH COMMANDS
+The following commands are used to interact with a MAT daemon.  More information on each command can be found in the command's man page.
+
+.sp
+\fBmatch-create\fR(1)
+.RS 4
+Create a match action table.
+.RE
+
+.sp
+\fBmatch-destroy\fR(1)
+.RS 4
+Destroy a match action table.
+.RE
+
+.sp
+\fBmatch-del_rule\fR(1)
+.RS 4
+Delete an existing rule from a table.
+.RE
+
+.sp
+\fBmatch-set_rule\fR(1)
+.RS 4
+Set a new rule in a table.
+.RE
+
+.sp
+\fBmatch-get_rules\fR(1)
+.RS 4
+Display rules in a table.
+.RE
+
+.sp
+\fBmatch-get_actions\fR(1)
+.RS 4
+Display actions in the pipeline.
+.RE
+
+.sp
+\fBmatch-get_graph\fR(1)
+.RS 4
+Display table graph.
+.RE
+
+.sp
+\fBmatch-get_header_graph\fR(1)
+.RS 4
+Display header graph.
+.RE
+
+.sp
+\fBmatch-get_headers\fR(1)
+.RS 4
+Display headers in the pipeline.
+.RE
+
+.sp
+\fBmatch-get_tables\fR(1)
+.RS 4
+Display match action tables.
+.RE

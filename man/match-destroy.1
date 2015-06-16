@@ -1,0 +1,68 @@
+.\" Header and footer
+.TH "MATCH\-DESTROY" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-destroy \- Destroy a match action table
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch destroy\fR \-f <family> \-p <pid> [\-g] [\-h] [\-i ifname]
+             source <source> (name <name> | id <id>)
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Send a command instructing a match action table daemon to destroy a match action table.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MATCH daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the MATCH daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+source <source>
+.RS 4
+The parent table id.
+.RE
+
+.br
+name <name>
+.RS 4
+The name of the table to destroy.
+.RE
+
+.br
+id <id>
+.RS 4
+The id of the table to destroy.
+.RE

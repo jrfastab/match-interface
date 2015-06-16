@@ -1,0 +1,13 @@
+# For agents that wish to program rules and receive rules from a client.
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: matchd-api
+Description: match-interface
+Version: @MATCHD_API_VERSION@
+Requires: match-interface
+Libs: -L${libdir} -lmatchd -lmatchies
+Cflags: -I${includedir}
+

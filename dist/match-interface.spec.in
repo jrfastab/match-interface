@@ -1,0 +1,97 @@
+Summary:  Match Interface 
+Name:     Match Action Table Configuration and Headers 
+Release:  1%{?dist}
+License:  BSD-3-Clause
+URL:      http://www.intel.com
+Group:    System Environment/Libraries
+Vendor:   Intel Corporation
+Packager: Jef Oliver <jef.oliver@intel.com>
+
+Version: @MATCH_INTERFACE_VERSION@
+Source0: %{name}-%{version}.tar.gz
+
+# since we are a root daemon we need to enable secure build flags
+%global _hardened_build 1
+
+BuildRequires: libnl3-devel, bash, sh-utils, tar, bzip2, gzip
+BuildRequires: gcc >= 4.4.0, binutils >= 2.12, redhat-rpm-config
+BuildRequires: autoconf, automake
+BuildRequires: libtool, pciutils-devel, pkgconfig, libconfig-devel
+BuildRequires: ies-api-devel >= 4.1.3, kernel-headers, graphviz-devel
+Requires:      glibc, libnl3, libconfig
+Requires:      ies-api >= 4.1.3, graphviz
+Autoreq:       0
+
+%description
+The matd package contains the daemon used to communicate
+match action table commands to switch specific backend as well as the
+tool used to add and remove rules from these tables.
+
+%package    devel
+Summary:    Development files for %{name}
+Group:      Development/Libraries
+Requires:   %{name} = %{version}-%{release}
+
+%description devel
+The matd-devel package contains the files necessary to develop software
+that uses the matd package.
+
+%package    matd
+Summary:    %{name} supporting daemon
+Group:      System Environment/Daemons
+Requires:   %{name} = %{version}-%{release}
+
+%description matd
+The match-interface listener daemon.
+
+%package    tools
+Summary:    Supporting tool for matd
+Group:      Applications/System
+Requires:   %{name} = %{version}-%{release}
+
+%description tools
+The matcfg tool that interacts with matd.
+
+%prep
+%setup -q
+
+%build
+./autogen.sh
+%configure
+%{__make} %{?_smp_mflags}
+
+%install
+%make_install
+
+%post
+/sbin/ldconfig
+
+%postun
+/sbin/ldconfig
+
+%files
+%{_libdir}/libmatch-*.so
+%{_libdir}/libmatchd-*.so
+%{_libdir}/libmatchies-*.so
+
+%files devel
+%{_includedir}/*
+%{_libdir}/libmatch.so
+%{_libdir}/libmatchd.so
+%{_libdir}/libmatchies.so
+%{_libdir}/*.a
+%{_libdir}/pkgconfig/*.pc
+%exclude %{_libdir}/*.la
+
+%files matd
+%{_sbindir}/matd
+
+%files tools
+%{_sbindir}/matcfg
+%{_mandir}/*
+
+%changelog
+* Fri Jun 05 2015 Jef Oliver <jef.oliver@intel.com>
+- Update RPM with better package splitting and new name
+* Thu Apr 09 2015 Jef Oliver <jef.oliver@intel.com>
+- First RPM build
