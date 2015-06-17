@@ -949,7 +949,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 				if (!err)
 					return -EINVAL;
 			} else {
-				err = sscanf(*argv, "0x%" SCNu32 "",
+				err = sscanf(*argv, "0x%" SCNx32 "",
 						&action->args[i].v.value_u32);
 				if (err != 1)
 					err = sscanf(*argv, "%" SCNu32 "",
