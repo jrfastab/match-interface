@@ -796,7 +796,8 @@ int match_nl_table_cmd_to_type(FILE *fp, bool print, int valid,
 		}
 		ifindex = nla_get_u32(tb[NET_MAT_IDENTIFIER]);
 		rtnl_link_i2name(link_cache, (int)ifindex, iface, IFNAMSIZ);
-		pfprintf(fp, print, "%s (%u):\n", iface, ifindex);
+		if (ifindex)
+			pfprintf(fp, print, "%s (%u):\n", iface, ifindex);
 		break;
 	default:
 		fprintf(stderr, "Warning unknown interface identifier type %i\n", type);
