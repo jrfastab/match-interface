@@ -118,6 +118,7 @@ void pp_header(FILE *fp, int p, struct net_mat_hdr *ref);
 void pp_rules(FILE *fp, int p, struct net_mat_rule *ref);
 void pp_rule(FILE *fp, int p, struct net_mat_rule *ref);
 void pp_table_graph(FILE *fp, int p, struct net_mat_tbl_node *nodes);
+void pp_ports(FILE *fp, int p, struct net_mat_port *port);
 void pp_port(FILE *fp, int p, struct net_mat_port *port);
 
 struct net_mat_hdr *get_headers(unsigned int uid);

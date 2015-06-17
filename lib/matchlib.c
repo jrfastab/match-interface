@@ -806,6 +806,17 @@ void pp_port(FILE *fp, int print,
 	pp_port_stats(fp, print, &port->stats);
 }
 
+void pp_ports(FILE *fp, int print, struct net_mat_port *ports)
+{
+        int i;
+
+        if (!print)
+                return;
+
+        for (i = 0; ports[i].port_id; i++)
+                pp_port(fp, print, &ports[i]);
+}
+
 static int match_compar_graph_nodes(const void *a, const void *b)
 {
 	const struct net_mat_tbl_node *g_a, *g_b;
