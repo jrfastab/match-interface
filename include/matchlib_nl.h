@@ -60,7 +60,7 @@ int match_nl_set_del_rules(struct nl_sock *nsd, uint32_t pid,
 struct net_mat_rule *match_nl_get_rules(struct nl_sock *nsd, uint32_t pid,
                       unsigned int ifindex, int family,
                       uint32_t tableid, uint32_t min, uint32_t max);
-int match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
+struct net_mat_port *match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
                       unsigned int ifindex, int family, uint32_t min, uint32_t max);
 int match_nl_create_update_destroy_table(struct nl_sock *nsd, uint32_t pid,
 				unsigned int ifindex, int family,
