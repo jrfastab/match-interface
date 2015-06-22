@@ -459,6 +459,80 @@ out:
 	match_nl_free_msg(msg);
 	return NULL;
 }
+
+int match_nl_set_port(struct nl_sock *nsd, uint32_t pid,
+				unsigned int ifindex, int family,
+				struct net_mat_port *port)
+{
+	uint8_t cmd = NET_MAT_PORT_CMD_SET_PORTS;
+	struct nlattr *tb[NET_MAT_MAX+1];
+	struct nlattr *nest, *nest1;
+	struct nlmsghdr *nlh;
+	struct match_msg *msg;
+	sigset_t bs;
+	int err = 0;
+
+	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
+	if (!msg) {
+		fprintf(stderr, "Error: Allocation failure\n");
+		return -ENOMSG;
+	}
+
+	if (nla_put_u32(msg->nlbuf,
+			NET_MAT_IDENTIFIER_TYPE,
+			NET_MAT_IDENTIFIER_IFINDEX) ||
+	    nla_put_u32(msg->nlbuf, NET_MAT_IDENTIFIER, ifindex)) {
+		fprintf(stderr, "Error: Identifier put failed\n");
+		match_nl_free_msg(msg);
+		return -EMSGSIZE;
+	}
+
+	nest = nla_nest_start(msg->nlbuf, NET_MAT_PORTS);
+	if (!nest) {
+		match_nl_free_msg(msg);
+		return -EMSGSIZE;
+	}
+	nest1 = nla_nest_start(msg->nlbuf, NET_MAT_PORTS);
+	match_put_port(msg->nlbuf, port);
+	nla_nest_end(msg->nlbuf, nest1);
+	nla_nest_end(msg->nlbuf, nest);
+	nl_send_auto(nsd, msg->nlbuf);
+	match_nl_free_msg(msg);
+
+	sigemptyset(&bs);
+	sigaddset(&bs, SIGINT);
+	sigprocmask(SIG_UNBLOCK, &bs, NULL);
+
+	msg = match_nl_recv_msg(nsd, &err);
+	sigprocmask(SIG_BLOCK, &bs, NULL);
+
+	if (!msg)
+		return -EINVAL;
+
+	nlh = msg->msg;
+	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
+	if (err < 0) {
+		fprintf(stderr, "Warning unable to parse set port msg\n");
+		match_nl_free_msg(msg);
+		return err;
+	}
+
+	err = match_nl_table_cmd_to_type(stdout, true, 0, tb);
+	if (err) {
+		match_nl_free_msg(msg);
+		return err;
+	}
+
+	if (tb[NET_MAT_PORTS]) {
+		fprintf(stderr, "Failed to set:\n");
+		match_get_ports(stdout, verbose, tb[NET_MAT_PORTS], NULL);
+		match_nl_free_msg(msg);
+		return -EINVAL;
+	}
+	match_nl_free_msg(msg);
+	return 0;
+}
+
 struct net_mat_port *match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
                       unsigned int ifindex, int family, uint32_t min, uint32_t max)
 {
