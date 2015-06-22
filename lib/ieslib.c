@@ -2093,7 +2093,8 @@ set_vni_cond(__u32 vni, __u32 mask,
 		return -EINVAL;
 
 	/* VNI can only be 24 bits long */
-	if ((vni > (1 << vni_bits) - 1) || (mask > (1 << vni_bits) - 1))
+	if ((vni > (__u32)(1 << vni_bits) - 1) ||
+	    (mask > (__u32)(1 << vni_bits) - 1))
 		return -ERANGE;
 
 	memset(L4DeepInspection, 0x0, sizeof(L4DeepInspection));
