@@ -90,8 +90,6 @@ char *graph_names(unsigned int uid);
 char *table_names(unsigned int uid);
 static void ppg_table_graph(FILE *fp, struct net_mat_tbl_node *nodes);
 static void ppg_header_graph(FILE *fp, struct net_mat_hdr_node *nodes);
-static void pp_header_graph(FILE *fp, int print,
-		struct net_mat_hdr_node *nodes);
 
 char *graph_names(unsigned int uid)
 {
@@ -638,7 +636,7 @@ out:
 	pfprintf(fp, print, " )\n");
 }
 
-static void pp_actions(FILE *fp, int print, struct net_mat_action *actions)
+void pp_actions(FILE *fp, int print, struct net_mat_action *actions)
 {
 	int i;
 
