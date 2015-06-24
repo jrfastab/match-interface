@@ -1139,11 +1139,14 @@ match_destroy_tbl_send(int verbose, uint32_t pid, int family,
 	nla_nest_end(msg->nlbuf, nest1);
 	nla_nest_end(msg->nlbuf, nest);
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 
 }
 
@@ -1487,10 +1490,13 @@ match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	nla_nest_end(msg->nlbuf, nest1);
 	nla_nest_end(msg->nlbuf, nest);
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 }
 
 int
@@ -1595,11 +1601,14 @@ rule_del_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	match_put_rule(msg->nlbuf, &rule);
 	nla_nest_end(msg->nlbuf, rules);
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 }
 
 int
@@ -1731,11 +1740,14 @@ rule_get_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		return err;
 	}
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 }
 
 int
@@ -1877,11 +1889,14 @@ rule_set_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	match_put_rule(msg->nlbuf, &rule);
 	nla_nest_end(msg->nlbuf, rules);
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 }
 
 static int
@@ -2020,10 +2035,13 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	nla_nest_end(msg->nlbuf, nest1);
 	nla_nest_end(msg->nlbuf, nest0);
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 }
 
 static int
@@ -2150,16 +2168,20 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	nla_nest_end(msg->nlbuf, nest1);
 	nla_nest_end(msg->nlbuf, nest);
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 }
 int
 match_send_recv(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	uint8_t cmd)
 {
 	struct match_msg *msg;
+	int err;
 
 	/* open generic netlink socket with MATCH api */
 	nsd = nl_socket_alloc();
@@ -2175,11 +2197,14 @@ match_send_recv(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		NET_MAT_IDENTIFIER_IFINDEX);
 	nla_put_u32(msg->nlbuf, NET_MAT_IDENTIFIER, ifindex);
 
-	nl_send_auto(nsd, msg->nlbuf);
-	process_rx_message(verbose);
+	err = nl_send_auto(nsd, msg->nlbuf);
+	if (err > 0)
+		process_rx_message(verbose);
+	else
+		fprintf(stderr, "Error: nl_send_auto failed %i\n", err);
 
 	match_nl_free_msg(msg);
-	return 0;
+	return err;
 }
 
 static int parse_arg_u32(char *argv, uint32_t *val)
