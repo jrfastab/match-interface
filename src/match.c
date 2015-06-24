@@ -2376,19 +2376,19 @@ int main(int argc, char **argv)
 	if (resolve_names) {
 		err = match_send_recv(0, pid, family, ifindex,
 				NET_MAT_TABLE_CMD_GET_HEADERS);
-		if (err)
+		if (err < 0)
 			goto out;
 		err = match_send_recv(0, pid, family, ifindex,
 				NET_MAT_TABLE_CMD_GET_ACTIONS);
-		if (err)
+		if (err < 0)
 			goto out;
 		err = match_send_recv(0, pid, family, ifindex,
 				NET_MAT_TABLE_CMD_GET_TABLES);
-		if (err)
+		if (err < 0)
 			goto out;
 		err = match_send_recv(0, pid, family, ifindex,
 				NET_MAT_TABLE_CMD_GET_HDR_GRAPH);
-		if (err)
+		if (err < 0)
 			goto out;
 	}
 
