@@ -123,7 +123,7 @@ static void match_usage(void)
 	printf("\n");
 	printf("Commands:\n");
 	printf("  create            create a match action table\n");
-	printf("  destroy           destroy a match action table table\n");
+	printf("  destroy           destroy a match action table\n");
 	printf("  update            update a match action table attribute\n");
 	printf("  del_rule          delete an existing rule from a table\n");
 	printf("  set_rule          set a new rule in a match action table\n");
