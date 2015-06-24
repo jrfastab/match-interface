@@ -1925,7 +1925,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				     &port.pci.bus, &port.pci.device, &port.pci.function);
 
 			if (ret != 3) {
-				fprintf(stderr, "Error: pci device must be 'bus:device.functoin`\n");
+				fprintf(stderr, "Error: pci device must be 'bus:device.function'\n");
 				get_lport_usage();
 				return -EINVAL;
 			}
