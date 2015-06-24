@@ -75,7 +75,10 @@ void switch_close(void);
 int switch_router_init(__u64 router_mac, int update_dmac, int update_smac,
 		       int update_vlan, int update_ttl, int curr_sw);
 
-int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, __u16 parser_vxlan_port);
+int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, __u16 parser_vxlan_port,
+                                   __u16 l4dst_nsh, __u16 parser_nsh_port);
+
+int switch_tunnel_engine_set_default_nge_port(int te, __u16 port);
 
 int switch_tunnel_engine_set_default_smac(int te, __u64 smac);
 

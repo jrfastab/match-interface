@@ -50,6 +50,8 @@
 #define FM_MAIN_SWITCH         0
 #define FM_DEFAULT_VLAN 1
 #define MATCH_DEEP_INSPECTION_PROFILE 5
+#define MATCH_NSH_PORT 4790
+#define MATCH_VXLAN_GPE_NSH_PROTO 4
 
 fm_semaphore seqSem;
 fm_int sw = FM_MAIN_SWITCH;
@@ -96,7 +98,9 @@ static int ies_pipeline_open(void *arg)
 		err = switch_configure_tunnel_engine(i,
 						     IES_ROUTER_MAC,
 						     IES_ROUTER_MAC,
-						     4789, 4789);
+						     4789, 4789,
+		                                     MATCH_NSH_PORT,
+		                                     MATCH_NSH_PORT);
 		if (err) {
 			fprintf(stderr, "switch_configure_tunnel_engine(%i) failed (%d)\n", i, err);
 			return err;
@@ -1013,7 +1017,8 @@ int switch_router_init(__u64 router_mac, int update_dmac, int update_smac,
 	return err;
 }
 
-int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, __u16 parser_vxlan_port)
+int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, __u16 parser_vxlan_port,
+                                   __u16 l4dst_nsh, __u16 parser_nsh_port)
 {
 	fm_status                err = FM_OK;
 	//fm_switch               *switchPtr;
@@ -1067,8 +1072,8 @@ int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, 
 	tunnelCfg.l4DstVxLan = l4dst /*FM10000_FLOW_VXLAN_PORT*/;
 	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_L4DST_VXLAN;
 
-	//tunnelCfg.l4DstNge = FM10000_FLOW_NGE_PORT;
-	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_L4DST_NGE;
+	tunnelCfg.l4DstNge = l4dst_nsh /*FM10000_FLOW_NGE_PORT*/;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_L4DST_NGE;
 
 	tunnelCfg.dmac = dmac /*switchPtr->physicalRouterMac*/;
 	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_DMAC;
@@ -1079,8 +1084,8 @@ int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, 
 	//tunnelCfg.ngeTime = FALSE;
 	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_NGE_TIME;
 
-	//tunnelCfg.encapProtocol = FM10000_FLOW_NVGRE_PROTOCOL;
-	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_PROTOCOL;
+	tunnelCfg.encapProtocol = MATCH_VXLAN_GPE_NSH_PROTO;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_PROTOCOL;
 
 	//tunnelCfg.encapVersion = FM10000_FLOW_NVGRE_VERSION;
 	//tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_VERSION;
@@ -1095,17 +1100,75 @@ int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, 
 
 	parserCfgFieldSelectMask = 0;
 
+	parserCfg.checkProtocol = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_PROTOCOL;
+
+	parserCfg.checkVersion = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_VERSION;
+
+	parserCfg.checkNgeOam = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_NGE_OAM;
+
+	parserCfg.checkNgeC = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_NGE_C;
+
 	parserCfg.vxLanPort = parser_vxlan_port /*FM10000_FLOW_VXLAN_PORT*/;
 	parserCfgFieldSelectMask |= FM10000_TE_PARSER_VXLAN_PORT;
 
-	//parserCfg.ngePort = FM10000_FLOW_NGE_PORT;
-	//parserCfgFieldSelectMask |= FM10000_TE_PARSER_NGE_PORT;
+	parserCfg.ngePort = parser_nsh_port /*FM10000_FLOW_NGE_PORT*/;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_NGE_PORT;
 
 	err = fm10000SetTeParser(sw,
 				 te,
 				 &parserCfg,
 				 parserCfgFieldSelectMask,
 				 TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeParser", err);
+
+	return err;
+}
+
+int switch_tunnel_engine_set_default_nge_port(int te, __u16 port)
+{
+	fm_status                err;
+	fm_fm10000TeTunnelCfg    tunnelCfg;
+	fm_uint32                tunnelCfgFieldSelectMask;
+	fm_fm10000TeParserCfg    parserCfg;
+	fm_uint32                parserCfgFieldSelectMask;
+
+	tunnelCfgFieldSelectMask = 0;
+
+	tunnelCfg.l4DstNge = port;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_L4DST_NGE;
+
+	tunnelCfg.encapProtocol = MATCH_VXLAN_GPE_NSH_PROTO;
+	tunnelCfgFieldSelectMask |= FM10000_TE_DEFAULT_TUNNEL_PROTOCOL;
+
+	err = fm10000SetTeDefaultTunnel(sw, te, &tunnelCfg,
+	                                tunnelCfgFieldSelectMask, TRUE);
+	if (err != FM_OK)
+		return cleanup("fm10000SetTeDefaultTunnel", err);
+
+	parserCfgFieldSelectMask = 0;
+
+	parserCfg.checkProtocol = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_PROTOCOL;
+
+	parserCfg.checkVersion = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_VERSION;
+
+	parserCfg.checkNgeOam = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_NGE_OAM;
+
+	parserCfg.checkNgeC = FALSE;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_CHECK_NGE_C;
+
+	parserCfg.ngePort = port;
+	parserCfgFieldSelectMask |= FM10000_TE_PARSER_NGE_PORT;
+
+	err = fm10000SetTeParser(sw, te, &parserCfg,
+				 parserCfgFieldSelectMask, TRUE);
 	if (err != FM_OK)
 		return cleanup("fm10000SetTeParser", err);
 
@@ -2647,9 +2710,11 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 		printf("actions[%d] = %d\n", i, actions[i]);
 		switch(actions[i]) {
 		case ACTION_TUNNEL_DECAP:
+		case ACTION_TUNNEL_DECAP_NSH:
 			te_decap = TRUE;
 			break;
 		case ACTION_TUNNEL_ENCAP:
+		case ACTION_TUNNEL_ENCAP_NSH:
 			te_encap = TRUE;
 			break;
 		}
@@ -2695,6 +2760,15 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 	if(err != FM_OK)
 		return cleanup("fmCreateFlowTETable", err);
 
+	/**
+	 * @todo - Each time a table is created the tunnel engine
+	 * configuration is overwritten. Until this is fixed we need
+	 * to explicitely set the destination port to support NSH.
+	 */
+	err = switch_tunnel_engine_set_default_nge_port(te, MATCH_NSH_PORT);
+	if (err != FM_OK)
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -2709,6 +2783,50 @@ int switch_del_TE_table(__u32 table_id)
 		return cleanup("fmDeleteFlowTETable", err);
 
 	return 0;
+}
+
+static void
+set_nsh_encap_action(__u32 dst_ip, __u32 src_ip, __u32 vni, __u16 src_port,
+                     __u16 dst_port, __u32 service_index, __u8 service_path_id,
+                     fm_flowAction *act, fm_flowParam *param)
+{
+	*act |= FM_FLOW_ACTION_ENCAP_SIP |
+	        FM_FLOW_ACTION_ENCAP_L4SRC |
+	        FM_FLOW_ACTION_ENCAP_L4DST |
+	        FM_FLOW_ACTION_ENCAP_VNI |
+	        FM_FLOW_ACTION_ENCAP_NGE;
+
+	param->tunnelType = FM_TUNNEL_TYPE_NGE;
+	param->outerDip.addr[0] = dst_ip;
+	param->outerSip.addr[0] = src_ip;
+	param->outerVni = vni;
+	param->outerL4Src = src_port;
+	param->outerL4Dst = dst_port;
+
+	/* 6 NgeData words are valid */
+	param->outerNgeMask = 0x3f;
+
+	/*
+	 * NSH Base Header is NgeData[0]
+	 *  Version = 0, O and C bits are unset.
+	 *  Length = 6 DWORDS, MD Type = 1, Next Protocol = 0x3 (Ethernet)
+	 */
+	param->outerNgeData[0] = 0x00060103;
+
+	/* NSH Service Path Header is NgeData[1] */
+	param->outerNgeData[1] = (service_index << 8) | service_path_id;
+
+	/* remaining fields are zero */
+	param->outerNgeData[2] = 0x0;
+	param->outerNgeData[3] = 0x0;
+	param->outerNgeData[4] = 0x0;
+	param->outerNgeData[5] = 0x0;
+
+#ifdef DEBUG
+	printf("%s: action TUNNEL_ENCAP_NSH(0x%08x,0x%08x,%d,%d,%d,%d,%d)\n",
+	       __func__, dst_ip, src_ip, vni, src_port, dst_port,
+	       service_index, service_path_id);
+#endif
 }
 
 int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, struct net_mat_field_ref *matches, struct net_mat_action *actions)
@@ -2849,6 +2967,21 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 
 	for (i = 0; actions && actions[i].uid; i++) {
 		switch(actions[i].uid) {
+		case ACTION_TUNNEL_ENCAP_NSH:
+			set_nsh_encap_action(actions[i].args[0].v.value_u32,
+			                     actions[i].args[1].v.value_u32,
+			                     actions[i].args[2].v.value_u32,
+			                     actions[i].args[3].v.value_u16,
+			                     actions[i].args[4].v.value_u16,
+			                     actions[i].args[5].v.value_u32,
+			                     actions[i].args[6].v.value_u8,
+			                     &act, &param);
+			break;
+		case ACTION_TUNNEL_DECAP_NSH:
+#ifdef DEBUG
+			printf("%s: action TUNNEL_DECAP_NSH\n", __func__);
+#endif
+			break;
 		case ACTION_TUNNEL_ENCAP:
 			act |= FM_FLOW_ACTION_ENCAP_SIP |
 #if 0
