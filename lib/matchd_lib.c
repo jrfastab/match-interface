@@ -145,20 +145,126 @@ done:
 	return nlbuf;
 }
 
+/*
+ * @struct multipart_head
+ * @brief defines the head of a multipart tailq
+ */
+TAILQ_HEAD(multipart_head, multipart_node);
+
+/*
+ * @struct multipart_node
+ * @brief defines a node of a multipart tailq
+ *
+ * @nlbuf the netlink message buffer
+ * @entries reference to other entries in the tailq
+ */
+struct multipart_node {
+	struct nl_msg *nlbuf;
+	TAILQ_ENTRY(multipart_node) entries;
+};
+
+/*
+ * free_multipart_msg() - free nlbufs and nodes in a multipart tailq
+ * @head: the tailq containing netlink message buffers
+ */
+static inline void free_multipart_msg(struct multipart_head *head)
+{
+	struct multipart_node *node;
+
+	TAILQ_FOREACH(node, head, entries) {
+		if (node->nlbuf)
+			nlmsg_free(node->nlbuf);
+		TAILQ_REMOVE(head, node, entries);
+		free(node);
+	}
+}
+
+/*
+ * send_done() - send a netlink done message
+ * @nlh: netlink message header from request message
+ *
+ * A NLMSG_DONE message is sent after multipart netlink messages to
+ * indicate to the receiver that the multipart message is completed.
+ *
+ * Return: number of bytes sent on success, or a negative error code
+ *         on failure
+ */
+static int send_done(struct nlmsghdr *nlh)
+{
+	struct nl_msg *nlbuf = NULL;
+	struct sockaddr_nl nladdr;
+	uint32_t pid;
+	int ret;
+
+	if (nlh == NULL)
+		return -EINVAL;
+
+	nlbuf = nlmsg_alloc();
+	if (nlbuf == NULL)
+		return -ENOMEM;
+
+	pid = nlh->nlmsg_pid;
+	if (!nlmsg_put(nlbuf, pid, nlh->nlmsg_seq, NLMSG_DONE, 0, 0)) {
+		nlmsg_free(nlbuf);
+		return -EMSGSIZE;
+	}
+
+	nladdr.nl_family = AF_NETLINK;
+	nladdr.nl_pid = pid;
+	nladdr.nl_groups = 0;
+
+	nlmsg_set_dst(nlbuf, &nladdr);
+
+	ret = nl_send_auto(nsd, nlbuf);
+	nlmsg_free(nlbuf);
+
+	return ret;
+}
+
+/*
+ * send_match_msg() - send a match message stored in a multipart tailq
+ * @nlh: the original netlink message request
+ * @head: the tailq containing netlink message buffers
+ * @multipart: when set, an NLMSG_DONE message will be sent
+ *
+ * Return: the number of bytes sent on success, or a negative error code
+ */
+static int
+send_multipart_msg(struct nlmsghdr *nlh, struct multipart_head *head,
+	bool multipart)
+{
+	struct multipart_node *node;
+	int err;
+	int ret = 0;
+
+	TAILQ_FOREACH(node, head, entries) {
+		err = nl_send_auto(nsd, node->nlbuf);
+		if (err < 0) {
+			free_multipart_msg(head);
+			return err;
+		}
+		ret += err;
+	}
+
+	if (multipart) {
+		err = send_done(nlh);
+		ret = (err < 0) ? err : ret + err;
+	}
+
+	free_multipart_msg(head);
+	return ret;
+}
+
 static int match_cmd_get_tables(struct nlmsghdr *nlh)
 {
 	struct nlattr *nest, *t, *tb[NET_MAT_MAX+1];
+	struct multipart_head head;
+	struct multipart_node *node;
+	struct nlmsghdr *nlh_multi;
 	unsigned int ifindex = 0;
 	struct nl_msg *nlbuf = NULL;
 	int i, err = -ENOMSG;
-
-	nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_TABLES,
-				NLM_F_REQUEST|NLM_F_ACK, 0);
-	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
-		err = -ENOMEM;
-		goto nla_put_failure;
-	}
+	bool multipart = false;
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX,
 				match_get_tables_policy);
@@ -168,38 +274,78 @@ static int match_cmd_get_tables(struct nlmsghdr *nlh)
 		goto nla_put_failure;
 	}
 
-	NLA_PUT_U32(nlbuf, NET_MAT_IDENTIFIER_TYPE,
-			NET_MAT_IDENTIFIER_IFINDEX);
-	NLA_PUT_U32(nlbuf, NET_MAT_IDENTIFIER, ifindex);
-	
-	nest = nla_nest_start(nlbuf, NET_MAT_TABLES);
-	if (!nest) {
-		err = -EMSGSIZE;
-		goto nla_put_failure;
-	}
-
 #ifdef MATCHD_MOCK_SUPPORT
-	for (i = 0; i < MAX_MOCK_TABLES; i++) {
-		if (my_dyn_table_list[i].uid < 1)
-			continue;
-
-		t = nla_nest_start(nlbuf, NET_MAT_TABLE);
-		err = match_put_table(nlbuf, &my_dyn_table_list[i]);
-		if (err) {
-			nla_nest_cancel(nlbuf, t);
-			goto nla_cancel;
+	TAILQ_INIT(&head);
+	for (i = 0; i < MAX_MOCK_TABLES;) {
+		/* allocate storage for nlbuf node */
+		node = malloc(sizeof(*node));
+		if (!node) {
+			fprintf(stderr, "Error: Cannot allocate node\n");
+			free_multipart_msg(&head);
+			return -ENOMEM;
 		}
-		nla_nest_end(nlbuf, t);
+
+		nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_TABLES,
+				NLM_F_REQUEST|NLM_F_ACK, 0);
+		if (!nlbuf) {
+			fprintf(stderr, "Error: Cannot allocate message\n");
+			/* special case: free the previously allocated node
+			 * since it has not yet been added to the tailq */
+			free(node);
+			free_multipart_msg(&head);
+			return -ENOMEM;
+		}
+
+		node->nlbuf = nlbuf;
+		TAILQ_INSERT_TAIL(&head, node, entries);
+
+		if (multipart) {
+			nlh_multi = nlmsg_hdr(nlbuf);
+			nlh_multi->nlmsg_flags |= NLM_F_MULTI;
+		}
+
+		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER_TYPE,
+				  NET_MAT_IDENTIFIER_IFINDEX);
+		if (err) {
+			fprintf(stderr, "Error: Cannot put identifier\n");
+			free_multipart_msg(&head);
+			goto nla_put_failure;
+		}
+
+		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER, ifindex);
+		if (err) {
+			fprintf(stderr, "Error: Cannot put ifindex\n");
+			free_multipart_msg(&head);
+			return  -EMSGSIZE;
+		}
+
+		nest = nla_nest_start(nlbuf, NET_MAT_TABLES);
+		if (!nest) {
+			err = -EMSGSIZE;
+			goto nla_put_failure;
+		}
+
+		for (; i < MAX_MOCK_TABLES; i++) {
+			if (my_dyn_table_list[i].uid < 1)
+				continue;
+
+			t = nla_nest_start(nlbuf, NET_MAT_TABLE);
+			err = match_put_table(nlbuf, &my_dyn_table_list[i]);
+			if (err) {
+				nlh_multi = nlmsg_hdr(nlbuf);
+				nlh_multi->nlmsg_flags |= NLM_F_MULTI;
+				multipart = true;
+				nla_nest_cancel(nlbuf, t);
+				break;
+			}
+			nla_nest_end(nlbuf, t);
+		}
+
+		nla_nest_end(nlbuf, nest);
 	}
 #endif /* MATCHD_MOCK_SUPPORT */
-	nla_nest_end(nlbuf, nest);
-	return nl_send_auto(nsd, nlbuf);
 
-#ifdef MATCHD_MOCK_SUPPORT
-nla_cancel:
-	nla_nest_cancel(nlbuf, nest);
-	/* Fall thru  for cleanup */
-#endif
+	return send_multipart_msg(nlh, &head, multipart);
 
 nla_put_failure:
 	if (nlbuf)
@@ -370,116 +516,6 @@ static struct nla_policy match_table_rules_policy[NET_MAT_TABLE_RULES_MAX + 1] =
 	[NET_MAT_TABLE_RULES_MAXPRIO] = { .type = NLA_U32,},
 	[NET_MAT_TABLE_RULES_RULES]   = { .type = NLA_NESTED,},
 };
-
-/*
- * send_done() - send a netlink done message
- * @nlh: netlink message header from request message
- *
- * A NLMSG_DONE message is sent after multipart netlink messages to
- * indicate to the receiver that the multipart message is completed.
- *
- * Return: number of bytes sent on success, or a negative error code
- *         on failure
- */
-static int send_done(struct nlmsghdr *nlh)
-{
-	struct nl_msg *nlbuf = NULL;
-	struct sockaddr_nl nladdr;
-	uint32_t pid;
-	int ret;
-
-	if (nlh == NULL)
-		return -EINVAL;
-
-	nlbuf = nlmsg_alloc();
-	if (nlbuf == NULL)
-		return -ENOMEM;
-
-	pid = nlh->nlmsg_pid;
-	if (!nlmsg_put(nlbuf, pid, nlh->nlmsg_seq, NLMSG_DONE, 0, 0)) {
-		nlmsg_free(nlbuf);
-		return -EMSGSIZE;
-	}
-
-	nladdr.nl_family = AF_NETLINK;
-	nladdr.nl_pid = pid;
-	nladdr.nl_groups = 0;
-
-	nlmsg_set_dst(nlbuf, &nladdr);
-
-	ret = nl_send_auto(nsd, nlbuf);
-	nlmsg_free(nlbuf);
-
-	return ret;
-}
-
-/*
- * @struct multipart_head
- * @brief defines the head of a multipart tailq
- */
-TAILQ_HEAD(multipart_head, multipart_node);
-
-/*
- * @struct multipart_node
- * @brief defines a node of a multipart tailq
- *
- * @nlbuf the netlink message buffer
- * @entries reference to other entries in the tailq
- */
-struct multipart_node {
-	struct nl_msg *nlbuf;
-	TAILQ_ENTRY(multipart_node) entries;
-};
-
-/*
- * free_multipart_msg() - free nlbufs and nodes in a multipart tailq
- * @head: the tailq containing netlink message buffers
- */
-static inline void free_multipart_msg(struct multipart_head *head)
-{
-	struct multipart_node *node;
-
-	TAILQ_FOREACH(node, head, entries) {
-		if (node->nlbuf)
-			nlmsg_free(node->nlbuf);
-		TAILQ_REMOVE(head, node, entries);
-		free(node);
-	}
-}
-
-/*
- * send_match_msg() - send a match message stored in a multipart tailq
- * @nlh: the original netlink message request
- * @head: the tailq containing netlink message buffers
- * @multipart: when set, an NLMSG_DONE message will be sent
- *
- * Return: the number of bytes sent on success, or a negative error code
- */
-static int
-send_multipart_msg(struct nlmsghdr *nlh, struct multipart_head *head,
-	bool multipart)
-{
-	struct multipart_node *node;
-	int err;
-	int ret = 0;
-
-	TAILQ_FOREACH(node, head, entries) {
-		err = nl_send_auto(nsd, node->nlbuf);
-		if (err < 0) {
-			free_multipart_msg(head);
-			return err;
-		}
-		ret += err;
-	}
-
-	if (multipart) {
-		err = send_done(nlh);
-		ret = (err < 0) ? err : ret + err;
-	}
-
-	free_multipart_msg(head);
-	return ret;
-}
 
 static int match_cmd_get_rules(struct nlmsghdr *nlh)
 {
