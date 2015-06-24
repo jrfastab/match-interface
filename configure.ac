@@ -72,6 +72,8 @@ dnl true/false variables.
 AM_CONDITIONAL([FMIESINCS], [test "x$IESINCS" != x])
 AM_CONDITIONAL([FMIESLIBS], [test "x$IESLIBS" != x])
 
+CFLAGS="$CFLAGS -Wl,--no-as-needed"
+
 dnl Process makefiles and any other files that need to be. This takes a
 dnl file.in (Makefile.in) and processes it correctly to the name specified
 dnl below.
