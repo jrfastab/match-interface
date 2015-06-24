@@ -148,6 +148,10 @@ static char pci_function_str[] = "pci_function";
 static char forward_vsi_str[] = "forward_vsi";
 static char egress_set_str[] = "egress_set";
 static char egress_ports_str[] = "port";
+static char service_path_id[] = "service_path_id";
+static char service_index[] = "service_index";
+static char tunnel_encap_nsh_str[] = "tunnel_encap_nsh";
+static char tunnel_decap_nsh_str[] = "tunnel_decap_nsh";
 
 enum ies_header_ids {
 	HEADER_ETHERNET = 1,
@@ -456,6 +460,8 @@ enum ies_pipeline_action_ids {
 	ACTION_FORWARD_TO_L2MPATH,
 	ACTION_FORWARD_VSI,
 	ACTION_SET_EGRESS_SET_V,
+	ACTION_TUNNEL_ENCAP_NSH,
+	ACTION_TUNNEL_DECAP_NSH,
 };
 
 static struct net_mat_action_arg set_egress_port_args[] = {
@@ -730,6 +736,37 @@ static struct net_mat_action egress_set = {
 	.args = egress_set_args,
 };
 
+static struct net_mat_action_arg tunnel_encap_nsh_args[] = {
+	{ .name = dst_ip,
+	  .type = NET_MAT_ACTION_ARG_TYPE_U32,},
+	{ .name = src_ip,
+	  .type = NET_MAT_ACTION_ARG_TYPE_U32,},
+	{ .name = vni,
+	  .type = NET_MAT_ACTION_ARG_TYPE_U32,},
+	{ .name = src_port,
+	  .type = NET_MAT_ACTION_ARG_TYPE_U16,},
+	{ .name = dst_port,
+	  .type = NET_MAT_ACTION_ARG_TYPE_U16,},
+	{ .name = service_index,
+	  .type = NET_MAT_ACTION_ARG_TYPE_U32,},
+	{ .name = service_path_id,
+	  .type = NET_MAT_ACTION_ARG_TYPE_U16,},
+	{ .name = empty,
+	  .type = NET_MAT_ACTION_ARG_TYPE_UNSPEC,},
+};
+
+static struct net_mat_action tunnel_encap_nsh = {
+	.name = tunnel_encap_nsh_str,
+	.uid = ACTION_TUNNEL_ENCAP_NSH,
+	.args = tunnel_encap_nsh_args,
+};
+
+static struct net_mat_action tunnel_decap_nsh = {
+	.name = tunnel_decap_nsh_str,
+	.uid = ACTION_TUNNEL_DECAP_NSH,
+	.args = NULL,
+};
+
 static struct net_mat_action *my_action_list[] = {
 	&set_egress_port,
 	&drop_packet,
@@ -759,6 +796,8 @@ static struct net_mat_action *my_action_list[] = {
 	&forward_to_l2_mp,
 	&forward_vsi,
 	&egress_set,
+	&tunnel_encap_nsh,
+	&tunnel_decap_nsh,
 	NULL,
 };
 
@@ -1017,6 +1056,8 @@ static __u32 actions_tunnel_engine[] = {ACTION_TUNNEL_ENCAP,
 					ACTION_SET_UDP_DST_PORT,
 					ACTION_SET_UDP_SRC_PORT,
 					ACTION_COUNT,
+					ACTION_TUNNEL_ENCAP_NSH,
+					ACTION_TUNNEL_DECAP_NSH,
 					0};
 #ifdef PORT_TO_VNI
 static __u32 actions_vni[] = {ACTION_SET_VNI, 0};
