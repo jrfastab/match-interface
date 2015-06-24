@@ -5,6 +5,7 @@ SUBDIRS = lib man src
 include_HEADERS = $(top_srcdir)/include/backend.h \
                   $(top_srcdir)/include/matchd_lib.h \
                   $(top_srcdir)/include/matchlib.h \
+                  $(top_srcdir)/include/matchlib_nl.h \
                   $(top_srcdir)/include/ieslib.h \
                   $(top_srcdir)/include/if_match.h
 
