@@ -2100,6 +2100,11 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				set_port_usage();
 				return -EINVAL;
 			}
+			if (port.max_frame_size == 0) {
+				fprintf(stderr, "Error: max_frame_size cannnot be zero\n");
+				set_port_usage();
+				return -EINVAL;
+			}
 		} else if (strcmp(*argv, "state") == 0) {
 			next_arg();
 			if (*argv == NULL) {
