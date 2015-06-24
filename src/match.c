@@ -2234,7 +2234,7 @@ static int parse_arg_u32(char *argv, uint32_t *val)
 int main(int argc, char **argv)
 {
 	uint8_t cmd = NET_MAT_TABLE_CMD_GET_TABLES;
-	int family = -1, err;
+	int family = NET_MAT_DFLT_FAMILY, err;
 	unsigned int ifindex = 0;
 	uint32_t pid = 0;
 	int verbose = 1;

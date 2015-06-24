@@ -127,7 +127,7 @@ static void matchd_int_handler(int sig __unused) {
 int main(int argc, char **argv)
 {
 	struct nl_sock *nsd;
-	int family = -1;
+	int family = NET_MAT_DFLT_FAMILY;
 	struct sockaddr_nl dest_addr;
 	size_t rcv_size = 2048;
 	unsigned char *buf;

@@ -32,6 +32,7 @@
 
 #include <linux/types.h>
 #define MATCHLIB_PID_FILE "/var/run/matchd.pid"
+#define NET_MAT_DFLT_FAMILY 555
 
 /**
  * @struct net_mat_fields
