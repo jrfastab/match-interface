@@ -798,6 +798,7 @@ int switch_init(int one_vlan)
 	fm_int          port;
 	fm_uint16	vlan;
 	fm_switchInfo   swInfo;
+	fm_bool		vr = FM_ENABLED;
 	fm_bool		bv = FM_DISABLED;
 	fm_bool		re = FM_ENABLED;
 	fm_bool		pi = FM_DISABLED;
@@ -825,8 +826,12 @@ int switch_init(int one_vlan)
 
 	fmGetSwitchInfo(sw, &swInfo);
 
-	if (one_vlan)
+	if (one_vlan) {
+		printf("initializing single vlan setup ...\n");
 		fmCreateVlan(sw, vlan);
+		printf("enable vlan reflect on vlan %d\n", vlan);
+		fmSetVlanAttribute(sw, vlan, FM_VLAN_REFLECT, &vr);
+	}
 
 	/* init non cpu ports and put them into their own vlan, make sure */
 	/* the parser goes to l4, no vlan boundary check, and routable    */
@@ -850,7 +855,11 @@ int switch_init(int one_vlan)
 			vlan = (fm_uint16)port;
 			defvlan = (fm_uint32)vlan;
 
+			printf("creating vlan %d\n", vlan);
 			fmCreateVlan(sw, vlan);
+
+			printf("enable vlan reflect on vlan %d\n", vlan);
+			fmSetVlanAttribute(sw, vlan, FM_VLAN_REFLECT, &vr);
 		}
 
 		if((err = fmSetPortState(sw, port, FM_PORT_STATE_UP, 0)) != FM_OK) {
