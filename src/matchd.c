@@ -68,6 +68,8 @@ static void matchd_usage(void)
 	MAT_LOG(ERR, "  -h            display this help and exit\n");
 	MAT_LOG(ERR, "  -l            list available backends and exit\n");
 	MAT_LOG(ERR, "  -s            add all ports to default vlan (ies_pipeline only)\n");
+	MAT_LOG(ERR, "  -v            be verbose (enable info messages)\n");
+	MAT_LOG(ERR, "  -vv           be very verbose (enable info+debug messages)\n");
 }
 
 static int matchd_create_pid(void)
@@ -138,10 +140,11 @@ int main(int argc, char **argv)
 	const char *backend = NULL;
 	struct switch_args sw_args;
 	struct sigaction sig_act;
+	int verbose = 0;
 
 	memset(&sw_args, 0, sizeof(sw_args));
 
-	while ((opt = getopt(argc, argv, "b:f:hls")) != -1) {
+	while ((opt = getopt(argc, argv, "b:f:vhls")) != -1) {
 		switch (opt) {
 		case 'b':
 			backend = optarg;
@@ -158,11 +161,21 @@ int main(int argc, char **argv)
 		case 's':
 			sw_args.single_vlan = true;
 			break;
+		case 'v':
+			++verbose;
+			break;
 		default:
 			matchd_usage();
 			exit(-1);
 		}
 	}
+
+	if (verbose > 1)
+		mat_setlogmask(MAT_LOG_UPTO(MAT_LOG_DEBUG));
+	else if (verbose > 0)
+		mat_setlogmask(MAT_LOG_UPTO(MAT_LOG_INFO));
+	else
+		mat_setlogmask(MAT_LOG_UPTO(MAT_LOG_ERR));
 
 	nsd = nl_socket_alloc();
 	nl_socket_set_local_port(nsd, (uint32_t)getpid());
