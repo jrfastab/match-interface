@@ -152,7 +152,7 @@ static void create_usage(void)
 	printf("  MATCH           : HEADER_INSTANCE.FIELD MASK_TYPE\n");
 	printf("  HEADER_INSTANCE : string (e.g. ethernet)\n");
 	printf("  FIELD           : string (e.g. dst_mac)\n");
-	printf("  MASK_TYPE       : lpm|exact\n");
+	printf("  MASK_TYPE       : mask|exact\n");
 	printf("For Example: match ethernet.dst_mac exact\n");
 	printf("\n");
 	printf("The specified matches must be a subset of the source table's matches.\n");
