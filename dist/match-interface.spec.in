@@ -1,5 +1,5 @@
-Summary:  Match Interface 
-Name:     Match Action Table Configuration and Headers 
+Summary:  Match Action Table Configuration and Headers
+Name:     match-interface
 Release:  1%{?dist}
 License:  BSD-3-Clause
 URL:      http://www.intel.com
@@ -36,21 +36,21 @@ Requires:   %{name} = %{version}-%{release}
 The matd-devel package contains the files necessary to develop software
 that uses the matd package.
 
-%package    matd
+%package    matchd
 Summary:    %{name} supporting daemon
 Group:      System Environment/Daemons
 Requires:   %{name} = %{version}-%{release}
 
-%description matd
+%description matchd
 The match-interface listener daemon.
 
 %package    tools
-Summary:    Supporting tool for matd
+Summary:    Supporting tool for matchd
 Group:      Applications/System
 Requires:   %{name} = %{version}-%{release}
 
 %description tools
-The matcfg tool that interacts with matd.
+The match tool that interacts with matchd.
 
 %prep
 %setup -q
@@ -83,14 +83,16 @@ The matcfg tool that interacts with matd.
 %{_libdir}/pkgconfig/*.pc
 %exclude %{_libdir}/*.la
 
-%files matd
-%{_sbindir}/matd
+%files matchd
+%{_sbindir}/matchd
 
 %files tools
-%{_sbindir}/matcfg
+%{_sbindir}/match
 %{_mandir}/*
 
 %changelog
+* Mon Jun 29 2015 Jef Oliver <jef.oliver@intel.com>
+- Update SPEC file to support match naming
 * Fri Jun 05 2015 Jef Oliver <jef.oliver@intel.com>
 - Update RPM with better package splitting and new name
 * Thu Apr 09 2015 Jef Oliver <jef.oliver@intel.com>
