@@ -46,6 +46,7 @@
 #include "ieslib.h"
 #include "matchlib.h"
 #include "backend.h"
+#include "matlog.h"
 
 #define FM_MAIN_SWITCH         0
 #define FM_DEFAULT_VLAN 1
@@ -73,7 +74,7 @@ static int ies_pipeline_open(void *arg)
 	if (!conf->disable_switch_init) {
 		err = switch_init(conf->single_vlan);
 		if (err) {
-			fprintf(stderr, "switch_init() failed (%d)\n", err);
+			MAT_LOG(ERR, "switch_init() failed (%d)\n", err);
 			return err;
 		}
 	}
@@ -81,7 +82,7 @@ static int ies_pipeline_open(void *arg)
 	if (!conf->disable_switch_router_init) {
 		err = switch_router_init(IES_ROUTER_MAC, 1, 0, 1, 1, 0);
 		if (err) {
-			fprintf(stderr, "switch_router_init() failed (%d)\n", err);
+			MAT_LOG(ERR, "switch_router_init() failed (%d)\n", err);
 			return err;
 		}
 	}
@@ -102,13 +103,13 @@ static int ies_pipeline_open(void *arg)
 		                                     MATCH_NSH_PORT,
 		                                     MATCH_NSH_PORT);
 		if (err) {
-			fprintf(stderr, "switch_configure_tunnel_engine(%i) failed (%d)\n", i, err);
+			MAT_LOG(ERR, "switch_configure_tunnel_engine(%i) failed (%d)\n", i, err);
 			return err;
 		}
 
 		err = fm10000GetTeDGlort(sw, i, 0, &teDGlort, false);
 		if (err) {
-			fprintf(stderr, "GetTeDglort(%i) failed (%d)\n",
+			MAT_LOG(ERR, "GetTeDglort(%i) failed (%d)\n",
 				i, err);
 			return err;
 		}
@@ -116,14 +117,14 @@ static int ies_pipeline_open(void *arg)
 		teDGlort.setSGlort = true;
 		err = fm10000SetTeDGlort(sw, i, 0, &teDGlort, false);
 		if (err) {
-			fprintf(stderr, "SetTeDglort(%i) failed (%d)\n",
+			MAT_LOG(ERR, "SetTeDglort(%i) failed (%d)\n",
 				i, err);
 			return err;
 		}
 
 		err = fm10000GetTeTrap(sw, 0, &teTrapCfg, false);
 		if (err) {
-			fprintf(stderr, "GetTeTrap(%i) failed (%d)\n", i, err);
+			MAT_LOG(ERR, "GetTeTrap(%i) failed (%d)\n", i, err);
 			return err;
 		}
 		teTrapCfg.trapGlort = 0;
@@ -131,13 +132,13 @@ static int ies_pipeline_open(void *arg)
 		err = fm10000SetTeTrap(sw, 0, &teTrapCfg,
 				       FM10000_TE_TRAP_BASE_DGLORT | FM10000_TE_TRAP_NO_FLOW_MATCH, false);
 		if (err) {
-			fprintf(stderr, "SetTeTrap(%i) failed (%d)\n", i, err);
+			MAT_LOG(ERR, "SetTeTrap(%i) failed (%d)\n", i, err);
 			return err;
 		}
-		printf("tunnel_engine(%i) is configured\n", i);
+		MAT_LOG(DEBUG, "tunnel_engine(%i) is configured\n", i);
 	}
 
-	printf("switch is ready for accepting commands..\n");
+	MAT_LOG(INFO, "switch is ready for accepting commands..\n");
 
 	return 0;
 }
@@ -165,7 +166,7 @@ static void ies_pipeline_get_rule_counters(struct net_mat_rule *rule)
 	err = switch_get_rule_counters(rule->hw_ruleid, switch_table_id,
 				       &rule->packets, &rule->bytes);
 	if (err)
-		fprintf(stderr, "switch_get_rule_counters error (%d)\n", err);
+		MAT_LOG(ERR, "switch_get_rule_counters error (%d)\n", err);
 }
 
 static int ies_pipeline_del_rules(struct net_mat_rule *rule)
@@ -180,24 +181,24 @@ static int ies_pipeline_del_rules(struct net_mat_rule *rule)
 	struct net_mat_field_ref *match;
 
 	if (!rule->table_id) {
-		fprintf(stderr, "%s: No table_id in del_rule cmd\n", __func__);
+		MAT_LOG(ERR, "%s: No table_id in del_rule cmd\n", __func__);
 		goto done;
 	}
 
 	switch (rule->table_id) {
 	case TABLE_TCAM:
-		fprintf(stderr, "%s: direct rule programing to TABLE_TCAM"
+		MAT_LOG(ERR, "%s: direct rule programing to TABLE_TCAM"
 				" is not supported\n", __func__);
 		goto done;
 		break;
 #if 0
 	case TABLE_ECMP_GROUP:
-		fprintf(stderr, "%s: rule programing to TABLE_ECMP_GROUP "
+		MAT_LOG(ERR, "%s: rule programing to TABLE_ECMP_GROUP "
 				"is not supported\n", __func__);
 		err = -EINVAL;
 		break;
 	case TABLE_FORWARD_GROUP:
-		fprintf(stderr, "%s: rule programing to TABLE_FORWARD_GROUP "
+		MAT_LOG(ERR, "%s: rule programing to TABLE_FORWARD_GROUP "
 				"is not supported\n", __func__);
 		err = -EINVAL;
 		break;
@@ -226,7 +227,7 @@ static int ies_pipeline_del_rules(struct net_mat_rule *rule)
 		}
 
 #ifdef DEBUG
-		printf("%s: deleting mac entry vlan %d"
+		MAT_LOG(DEBUG, "%s: deleting mac entry vlan %d"
 			" mac %02x:%02x:%02x:%02x:%02x:%02x\n",
 			__func__, vlan_id, mac[0], mac[1], mac[2], mac[3],
 			mac[4], mac[5]);
@@ -241,7 +242,7 @@ static int ies_pipeline_del_rules(struct net_mat_rule *rule)
 		tbl = get_tables(rule->table_id);
 		if (NULL == tbl) {
 			err = -EINVAL;
-			fprintf(stderr, "%s: unknown table %i\n",
+			MAT_LOG(ERR, "%s: unknown table %i\n",
 				__func__, rule->table_id);
 			goto done;
 		}
@@ -249,7 +250,7 @@ static int ies_pipeline_del_rules(struct net_mat_rule *rule)
 		src = get_tables(tbl->source);
 		if (!src) {
 			err = -EINVAL;
-			fprintf(stderr, "%s: unknown table source %i\n",
+			MAT_LOG(ERR, "%s: unknown table source %i\n",
                                 __func__, tbl->source);
 			goto done;
 		}
@@ -263,7 +264,7 @@ static int ies_pipeline_del_rules(struct net_mat_rule *rule)
 							  switch_table_id);
 		} else {
 			err = -EINVAL;
-			fprintf(stderr, "%s: table %i has unknown source %d\n",
+			MAT_LOG(ERR, "%s: table %i has unknown source %d\n",
 				__func__, rule->table_id, src->uid);
 			goto done;
 		}
@@ -283,7 +284,7 @@ static int ies_pipeline_set_rules(struct net_mat_rule *rule)
 	struct net_mat_tbl *tbl, *src;
 
 	if (!rule->table_id) {
-		fprintf(stderr, "%s: No table_id in set_rule cmd\n", __func__);
+		MAT_LOG(ERR, "%s: No table_id in set_rule cmd\n", __func__);
 		goto done;
 	}
 
@@ -291,24 +292,24 @@ static int ies_pipeline_set_rules(struct net_mat_rule *rule)
 	action = &rule->actions[0];
 
 	if (!match) {
-		fprintf(stderr, "%s: nop match abort\n", __func__);
+		MAT_LOG(ERR, "%s: nop match abort\n", __func__);
 		goto done;
 	}
 
 	if (!action) {
-		fprintf(stderr, "%s: nop action abort\n", __func__);
+		MAT_LOG(ERR, "%s: nop action abort\n", __func__);
 		goto done;
 	}
 
 	switch (rule->table_id) {
 	case TABLE_TCAM:
-		fprintf(stderr, "%s: direct rule programing to"
+		MAT_LOG(ERR, "%s: direct rule programing to"
 			" TABLE_TCAM is not supported\n", __func__);
 		goto done;
 		break;
 	case TABLE_TUNNEL_ENGINE_A:
 	case TABLE_TUNNEL_ENGINE_B:
-		fprintf(stderr, "%s: direct rule programing to"
+		MAT_LOG(ERR, "%s: direct rule programing to"
 			" TABLE_TUNNEL_ENGINE_A or B is not supported\n", __func__);
 		goto done;
 		break;
@@ -325,7 +326,7 @@ static int ies_pipeline_set_rules(struct net_mat_rule *rule)
 		tbl = get_tables(rule->table_id);
 		if (NULL == tbl) {
 			err = -EINVAL;
-			fprintf(stderr, "%s: unknown table %i\n",
+			MAT_LOG(ERR, "%s: unknown table %i\n",
 				__func__, rule->table_id);
 			goto done;
 		}
@@ -333,7 +334,7 @@ static int ies_pipeline_set_rules(struct net_mat_rule *rule)
 		src = get_tables(tbl->source);
 		if (!src) {
 			err = -EINVAL;
-			fprintf(stderr, "%s: unknown table source %i\n",
+			MAT_LOG(ERR, "%s: unknown table source %i\n",
                                 __func__, tbl->source);
 			goto done;
 		}
@@ -353,7 +354,7 @@ static int ies_pipeline_set_rules(struct net_mat_rule *rule)
 							 rule->actions);
 		} else {
 			err = -EINVAL;
-			fprintf(stderr, "%s: table %i has unknown source %d\n",
+			MAT_LOG(ERR, "%s: table %i has unknown source %d\n",
 				__func__, rule->table_id, src->uid);
 			goto done;
 		}
@@ -371,7 +372,7 @@ static int ies_pipeline_create_table(struct net_mat_tbl *tbl)
 
 	switch_table_id = tbl->uid - TABLE_DYN_START + 1;
 	if (switch_table_id >= FM_FLOW_MAX_TABLE_TYPE) {
-		fprintf(stderr, "Error: Table ID must be between %u and %u, inclusive\n",
+		MAT_LOG(ERR, "Error: Table ID must be between %u and %u, inclusive\n",
 		        TABLE_DYN_START,
 		        TABLE_DYN_START + FM_FLOW_MAX_TABLE_TYPE - 2);
 		return err;
@@ -445,19 +446,19 @@ static int ies_pipeline_update_table(struct net_mat_tbl *tbl)
 		te = 1;
 		break;
 	default:
-		fprintf(stderr, "ERROR: Table %i, does not support updates\n", tbl->uid);
+		MAT_LOG(ERR, "ERROR: Table %i, does not support updates\n", tbl->uid);
 		return -EINVAL;
 	}
 
 	err =  switch_tunnel_engine_set_default_smac(te, smac);
 	if (err) {
-		fprintf(stderr, "Error: set_default_smac failed (%d)\n", err);
+		MAT_LOG(ERR, "Error: set_default_smac failed (%d)\n", err);
 		return err;
 	}
 
 	err =  switch_tunnel_engine_set_default_dmac(te, dmac);
 	if (err) {
-		fprintf(stderr, "Error: set_default_dmac failed (%d)\n", err);
+		MAT_LOG(ERR, "Error: set_default_dmac failed (%d)\n", err);
 		return err;
 	}
 
@@ -469,7 +470,7 @@ static int ies_pipeline_update_table(struct net_mat_tbl *tbl)
 
 	err = fm10000GetTeTrap(sw, te, &teTrapCfg, false);
 	if (err) {
-		fprintf(stderr, "GetTeTrap(%i) failed (%d)\n", i, err);
+		MAT_LOG(ERR, "GetTeTrap(%i) failed (%d)\n", i, err);
 		return err;
 	}
 	teTrapCfg.trapGlort = dflt_port;
@@ -477,7 +478,7 @@ static int ies_pipeline_update_table(struct net_mat_tbl *tbl)
 	err = fm10000SetTeTrap(sw, 0, &teTrapCfg,
 			       FM10000_TE_TRAP_BASE_DGLORT | FM10000_TE_TRAP_NO_FLOW_MATCH, false);
 	if (err) {
-		fprintf(stderr, "SetTeTrap(%i) failed (%d)\n", i, err);
+		MAT_LOG(ERR, "SetTeTrap(%i) failed (%d)\n", i, err);
 		return err;
 	}
 
@@ -488,7 +489,7 @@ static int ies_pipeline_update_table(struct net_mat_tbl *tbl)
 
 static int cleanup(const char *src, int err)
 {
-	fprintf(stderr, "ERROR: %s: %s\n", src, fmErrorMsg(err));
+	MAT_LOG(ERR, "ERROR: %s: %s\n", src, fmErrorMsg(err));
 	return -1;
 }
 
@@ -596,7 +597,7 @@ static int ies_ports_get(struct net_mat_port **ports)
 			p[i].state = NET_MAT_PORT_T_STATE_DOWN;
 			break;
 		default:
-			fprintf(stderr, "Warning: unknown port state %i\n", state);
+			MAT_LOG(ERR, "Warning: unknown port state %i\n", state);
 			break;
 		}
 
@@ -635,7 +636,7 @@ static int ies_ports_set(struct net_mat_port *ports)
 		}
 
 		if (err) {
-			fprintf(stderr, "Error: SetPortState failed!\n");
+			MAT_LOG(ERR, "Error: SetPortState failed!\n");
 			return -EINVAL;
 		}
 
@@ -668,7 +669,7 @@ static int ies_ports_set(struct net_mat_port *ports)
 		if (p->speed != NET_MAT_PORT_T_SPEED_UNSPEC) {
 			err = fmSetPortAttribute(sw, port, FM_PORT_SPEED, &s);
 			if (err) {
-				fprintf(stderr, "Error: SetPortAttribute FM_PORT_SPEED failed!\n");
+				MAT_LOG(ERR, "Error: SetPortAttribute FM_PORT_SPEED failed!\n");
 				return -EINVAL;
 			}
 		}
@@ -678,7 +679,7 @@ static int ies_ports_set(struct net_mat_port *ports)
 			                         FM_PORT_MAX_FRAME_SIZE,
 			                         &p->max_frame_size);
 			if (err) {
-				fprintf(stderr, "Error: SetPortAttribute FM_PORT_MAX_FRAME_SIZE failed!\n");
+				MAT_LOG(ERR, "Error: SetPortAttribute FM_PORT_MAX_FRAME_SIZE failed!\n");
 				return -EINVAL;
 			}
 		}
@@ -693,7 +694,7 @@ static int ies_port_get_lport(struct net_mat_port_pci *pci, unsigned int *lport)
 	int err = 0;
 
 #ifdef DEBUG
-	printf("get_lport pci %u:%u.%u lport %i\n", pci->bus, pci->device, pci->function, n);
+	MAT_LOG(DEBUG, "get_lport pci %u:%u.%u lport %i\n", pci->bus, pci->device, pci->function, n);
 #endif
 	if (n < 0)
 		err = n;
@@ -733,17 +734,17 @@ static void eventHandler(fm_int event, fm_int sw, void *ptr)
 
 	switch (event) {
 	case FM_EVENT_SWITCH_INSERTED:
-		printf("Switch #%d inserted!\n", sw);
+		MAT_LOG(INFO, "Switch #%d inserted!\n", sw);
 		if (sw == FM_MAIN_SWITCH)
 			fmSignalSemaphore(&seqSem);
 		break;
 
 	case FM_EVENT_PORT:
-		printf("port event: port %d is %s\n", portEvent->port, (portEvent->linkStatus ? "up" : "down"));
+		MAT_LOG(INFO, "port event: port %d is %s\n", portEvent->port, (portEvent->linkStatus ? "up" : "down"));
 		break;
 
 	case FM_EVENT_PKT_RECV:
-		printf("packet received\n");
+		MAT_LOG(INFO, "packet received\n");
 		break;
 	}
 }
@@ -769,7 +770,7 @@ static int configure_deep_inspection(void)
 
 	err = fmGetSwitchAttribute(sw, FM_SWITCH_PARSER_DI_CFG, &dip);
 	if (err != FM_OK) {
-		fprintf(stderr, "Error: get deep inspection parser\n");
+		MAT_LOG(ERR, "Error: get deep inspection parser\n");
 		return cleanup("fmGetSwitchAttribute", err);
 	}
 
@@ -783,11 +784,18 @@ static int configure_deep_inspection(void)
 	/* parser needs to be configured */
 	err = fmSetSwitchAttribute(sw, FM_SWITCH_PARSER_DI_CFG, &dip_expect);
 	if (err != FM_OK) {
-		fprintf(stderr, "Error: deep inspection parser\n");
+		MAT_LOG(ERR, "Error: deep inspection parser\n");
 		return cleanup("fmSetSwitchAttribute", err);
 	}
 
 	return 0;
+}
+
+static void
+ies_log(fm_text buf, fm_voidptr cookie1 __attribute__((unused)),
+        fm_voidptr cookie2 __attribute__((unused)))
+{
+	MAT_LOG(DEBUG, "%s", buf);
 }
 
 int switch_init(int one_vlan)
@@ -804,12 +812,19 @@ int switch_init(int one_vlan)
 	fm_bool		pi = FM_DISABLED;
 	fm_int		pc = FM_PORT_PARSER_STOP_AFTER_L4;
 	fm_uint32	defvlan;
+	fm_logCallBackSpec logCallBackSpec;
 #ifdef VXLAN_MCAST
 	int		i;
 #endif /* VXLAN_MCAST */
     
 	fmOSInitialize();
     
+	logCallBackSpec.callBack = ies_log;
+	err = fmSetLoggingType(FM_LOG_TYPE_CALLBACK, 0, &logCallBackSpec);
+	if (err) {
+		return cleanup("fmSetLoggingType", err);
+	}
+
 	fmCreateSemaphore(seq_str, FM_SEM_BINARY, &seqSem, 0);
 
 	if ((err = fmInitialize(eventHandler)) != FM_OK) {
@@ -827,9 +842,9 @@ int switch_init(int one_vlan)
 	fmGetSwitchInfo(sw, &swInfo);
 
 	if (one_vlan) {
-		printf("initializing single vlan setup ...\n");
+		MAT_LOG(DEBUG, "initializing single vlan setup ...\n");
 		fmCreateVlan(sw, vlan);
-		printf("enable vlan reflect on vlan %d\n", vlan);
+		MAT_LOG(DEBUG, "enable vlan reflect on vlan %d\n", vlan);
 		fmSetVlanAttribute(sw, vlan, FM_VLAN_REFLECT, &vr);
 	}
 
@@ -839,15 +854,15 @@ int switch_init(int one_vlan)
 		if((err = fmMapCardinalPort(sw, cpi, &port, NULL)) != FM_OK) {
 			return cleanup("fmMapCardinalPort", err);
 		}
-		printf("cpi=%d, port=%d\n", cpi, port);
+		MAT_LOG(DEBUG, "cpi=%d, port=%d\n", cpi, port);
 
 		if ((err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi)) != FM_OK) {
 			cleanup("fmGetPortAttribute", err);
-			printf("skip port %d\n", port);
+			MAT_LOG(DEBUG, "skip port %d\n", port);
 			continue;
 		}
 		if (pi == FM_ENABLED) {
-			printf("skip internal port %d\n", port);
+			MAT_LOG(DEBUG, "skip internal port %d\n", port);
 			continue;
 		}
 
@@ -855,47 +870,47 @@ int switch_init(int one_vlan)
 			vlan = (fm_uint16)port;
 			defvlan = (fm_uint32)vlan;
 
-			printf("creating vlan %d\n", vlan);
+			MAT_LOG(DEBUG, "creating vlan %d\n", vlan);
 			fmCreateVlan(sw, vlan);
 
-			printf("enable vlan reflect on vlan %d\n", vlan);
+			MAT_LOG(DEBUG, "enable vlan reflect on vlan %d\n", vlan);
 			fmSetVlanAttribute(sw, vlan, FM_VLAN_REFLECT, &vr);
 		}
 
 		if((err = fmSetPortState(sw, port, FM_PORT_STATE_UP, 0)) != FM_OK) {
 			return cleanup("fmSetPortState", err);
 		}
-		printf("set port %d to UP\n", port);
+		MAT_LOG(DEBUG, "set port %d to UP\n", port);
 
 		if((err = fmAddVlanPort(sw, vlan, port, FALSE)) != FM_OK) {
 			return cleanup("fmAddVlanPort", err);
 		}
-		printf("add port %d to vlan %u\n", port, vlan);
+		MAT_LOG(DEBUG, "add port %d to vlan %u\n", port, vlan);
 
 		if(( err = fmSetVlanPortState(sw, vlan, port, FM_STP_STATE_FORWARDING)) != FM_OK) {
 			return cleanup("fmSetVlanPortState", err);
 		}
-		printf("set STP state of port %d in vlan %u to forwarding\n", port, vlan);
+		MAT_LOG(DEBUG, "set STP state of port %d in vlan %u to forwarding\n", port, vlan);
 
 		if((err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan)) != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
-		printf("set pvid for  port %d to vlan %u\n", port, vlan);
+		MAT_LOG(DEBUG, "set pvid for  port %d to vlan %u\n", port, vlan);
 
 		if((err = fmSetPortAttribute(sw, port, FM_PORT_DROP_BV, &bv)) != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
-		printf("set FM_PORT_DROP_BV for port %d to %d\n", port, bv);
+		MAT_LOG(DEBUG, "set FM_PORT_DROP_BV for port %d to %d\n", port, bv);
 
 		if((err = fmSetPortAttribute(sw, port, FM_PORT_PARSER, &pc)) != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
-		printf("set FM_PORT_PARSER for port %d to %d\n", port, pc);
+		MAT_LOG(DEBUG, "set FM_PORT_PARSER for port %d to %d\n", port, pc);
 
 		if((err = fmSetPortAttribute(sw, port, FM_PORT_ROUTABLE, &re)) != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
-		printf("set FM_PORT_ROUTABLE for port %d to %d\n", port, re);
+		MAT_LOG(DEBUG, "set FM_PORT_ROUTABLE for port %d to %d\n", port, re);
 	}
 
 	/* port cpu port on default vlan */
@@ -903,17 +918,17 @@ int switch_init(int one_vlan)
 	if(( err =fmGetCpuPort(sw, &port)) != FM_OK) {
 		return cleanup("fmGetCpuPort", err);
 	}
-	printf("find cpu port %d\n", port);
+	MAT_LOG(DEBUG, "find cpu port %d\n", port);
 	if((err = fmAddVlanPort(sw, vlan, port, FALSE)) != FM_OK) {
 		return cleanup("fmAddVlanPort", err);
 	}
-	printf("add port %d to vlan %u\n", port, vlan);
+	MAT_LOG(DEBUG, "add port %d to vlan %u\n", port, vlan);
 	if((err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan)) != FM_OK) {
 		return cleanup("fmSetPortAttribute", err);
 	}
-	printf("set pvid for  port %d to vlan %u\n", port, vlan);
+	MAT_LOG(DEBUG, "set pvid for  port %d to vlan %u\n", port, vlan);
 
-	printf("Switch is UP, all ports are now enabled\n");
+	MAT_LOG(DEBUG, "Switch is UP, all ports are now enabled\n");
 
 #ifdef VXLAN_MCAST
 	for (i=0; i< MATCH_TABLE_SIZE; i++) {
@@ -931,28 +946,28 @@ static void switch_clean_shm(void)
 	int shm_id = 0;
 	struct shmid_ds shm_info;
 
-	printf("Cleaning up shared memory...");
+	MAT_LOG(DEBUG, "Cleaning up shared memory...");
 	if ((shm_key_env = getenv("FM_API_SHM_KEY")) != NULL) {
 		shm_key_str = strtok(shm_key_env, ",");
 		if(!shm_key_str)
 			return;
 		shm_key = (int) strtol(shm_key_str, NULL, 10);
-		printf("shm_key=%d", shm_key);
+		MAT_LOG(DEBUG, "shm_key=%d", shm_key);
 
 		shm_id = shmget(shm_key, 0, 0);
-		printf(",shm_id=0x%x", shm_id);
+		MAT_LOG(DEBUG, ",shm_id=0x%x", shm_id);
 
 		 if (shm_id != -1)
 			shmctl(shm_id, IPC_RMID, &shm_info);
 	}
-	printf("...done.\n");
+	MAT_LOG(DEBUG, "...done.\n");
 }
 
 void switch_close(void)
 {
 	switch_clean_shm();
 
-	printf("Calling fmTerminate()\n");
+	MAT_LOG(DEBUG, "Calling fmTerminate()\n");
 	fmTerminate();
 }
 
@@ -990,38 +1005,38 @@ int switch_router_init(__u64 router_mac, int update_dmac, int update_smac,
 		if((err = fmMapCardinalPort(sw, cpi, &port, NULL)) != FM_OK) {
 			return cleanup("fmMapCardinalPort", err);
 		}
-		printf("cpi=%d, port=%d\n", cpi, port);
+		MAT_LOG(DEBUG, "cpi=%d, port=%d\n", cpi, port);
 
 		if ((err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi)) != FM_OK) {
 			cleanup("fmGetPortAttribute", err);
-			printf("skip port %d\n", port);
+			MAT_LOG(DEBUG, "skip port %d\n", port);
 			continue;
 		}
 		if (pi == FM_ENABLED) {
-			printf("skip internal port %d\n", port);
+			MAT_LOG(DEBUG, "skip internal port %d\n", port);
 			continue;
 		}
 
 		if((err = fmSetPortAttribute(sw, port, FM_PORT_ROUTED_FRAME_UPDATE_FIELDS, &ru)) != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
-		printf("set FM_PORT_ROUTED_FRAME_UPDATE_FIELDS for port %d to 0x%08x\n", port, ru);
+		MAT_LOG(DEBUG, "set FM_PORT_ROUTED_FRAME_UPDATE_FIELDS for port %d to 0x%08x\n", port, ru);
 
 		if((err = fmSetPortAttribute(sw, port, FM_PORT_UPDATE_TTL, &rt)) != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
-		printf("set FM_PORT_UPDATE_TTL for port %d to %d\n", port, rt);
+		MAT_LOG(DEBUG, "set FM_PORT_UPDATE_TTL for port %d to %d\n", port, rt);
 	}
 
 	if((err = fmSetRouterAttribute(sw, FM_ROUTER_PHYSICAL_MAC_ADDRESS, (void *)&router_mac)) != FM_OK) {
 		return cleanup("fmSetRouterAttribute", err);
 	}
-	printf("set default router mac to 0x%012llx\n", router_mac);
+	MAT_LOG(DEBUG, "set default router mac to 0x%012llx\n", router_mac);
 
 	if((err = fmSetRouterState(sw, 0, FM_ROUTER_STATE_ADMIN_UP)) != FM_OK) {
 		return cleanup("fmSetRouterState", err);
 	}
-	printf("bring up the default router\n");
+	MAT_LOG(DEBUG, "bring up the default router\n");
 
 	return err;
 }
@@ -1040,7 +1055,7 @@ int switch_configure_tunnel_engine(int te, __u64 smac, __u64 dmac, __u16 l4dst, 
 	fm_uint32                parserCfgFieldSelectMask;
 
 #ifdef DEBUG
-	printf("configuring tunnel engine %d: smac 0x%012llx, dmac 0x%012llx, l4dst %d, parser_vxlan_port %d\n",
+	MAT_LOG(DEBUG, "configuring tunnel engine %d: smac 0x%012llx, dmac 0x%012llx, l4dst %d, parser_vxlan_port %d\n",
 	       te, smac, dmac, l4dst, parser_vxlan_port);
 #endif /* DEBUG */
 
@@ -1191,7 +1206,7 @@ int switch_tunnel_engine_set_default_smac(int te, __u64 smac)
 	fm_uint32                tunnelCfgFieldSelectMask;
 
 #ifdef DEBUG
-	printf("setting tunnel engine %d default smac 0x%012llx\n", te, smac);
+	MAT_LOG(DEBUG, "setting tunnel engine %d default smac 0x%012llx\n", te, smac);
 #endif /* DEBUG */
 
 	tunnelCfgFieldSelectMask = 0;
@@ -1217,7 +1232,7 @@ int switch_tunnel_engine_set_default_dmac(int te, __u64 dmac)
 	fm_uint32                tunnelCfgFieldSelectMask;
 
 #ifdef DEBUG
-	printf("setting tunnel engine %d default dmac 0x%012llx\n", te, dmac);
+	MAT_LOG(DEBUG, "setting tunnel engine %d default dmac 0x%012llx\n", te, dmac);
 #endif /* DEBUG */
 
 	tunnelCfgFieldSelectMask = 0;
@@ -1257,7 +1272,7 @@ int switch_get_rule_counters(__u32 ruleid, __u32 switch_table_id,
 	}
 #ifdef DEBUG
 	else
-		printf("%s: rule table %d ruleid %d pkts %lld octets %lld\n", 
+		MAT_LOG(DEBUG, "%s: rule table %d ruleid %d pkts %lld octets %lld\n",
 		       __func__, switch_table_id, ruleid, counters.cntPkts, counters.cntOctets);
 #endif /* DEBUG */
 
@@ -1387,13 +1402,13 @@ static int pci_to_pep(uint8_t bus)
 
 	f = fopen(fname, "r");
 	if (!f) {
-		fprintf(stderr, "Error: Cannot open %s\n", fname);
+		MAT_LOG(ERR, "Error: Cannot open %s\n", fname);
 		return -errno;
 	}
 
 	n = fread(buf, sizeof(uint32_t), 8, f);
 	if (n != 8) {
-		fprintf(stderr, "Error: Cannot read %s\n", fname);
+		MAT_LOG(ERR, "Error: Cannot read %s\n", fname);
 		fclose(f);
 		return -errno;
 	}
@@ -1508,7 +1523,7 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 			vlan_id = matches[i].v.u16.value_u16;
 			break;
 		default:
-			fprintf(stderr, "Error: unknown match instance %d\n",
+			MAT_LOG(ERR, "Error: unknown match instance %d\n",
 				matches[i].instance);
 			return -EINVAL;
 		}
@@ -1542,30 +1557,30 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 			lport_found = true;
 			break;
 		default:
-			fprintf(stderr, "Error: unknown action id\n");
+			MAT_LOG(ERR, "Error: unknown action id\n");
 			return -EINVAL;
 		}
 	}
 
 	if (!mac_found) {
-		fprintf(stderr, "Error: mac address is required\n");
+		MAT_LOG(ERR, "Error: mac address is required\n");
 		return -EINVAL;
 	}
 
 	if (vsi_found && lport_found) {
-		fprintf(stderr, "Error: FORWARD_VSI and SET_EGRESS_PORT actions are mutually exclusive\n");
+		MAT_LOG(ERR, "Error: FORWARD_VSI and SET_EGRESS_PORT actions are mutually exclusive\n");
 		return -EINVAL;
 	}
 
 	if (!(vsi_found || lport_found)) {
-		fprintf(stderr, "Error: no action specified\n");
+		MAT_LOG(ERR, "Error: no action specified\n");
 		return -EINVAL;
 	}
 
 	if (vsi_found) {
 		lport = pci_to_lport(bus, device, function);
 		if (lport < 0) {
-			fprintf(stderr, "Error: pci to log port\n");
+			MAT_LOG(ERR, "Error: pci to log port\n");
 			return -EINVAL;
 		}
 	}
@@ -1579,7 +1594,7 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	macEntry.port = lport;
 
 #ifdef DEBUG
-	printf("adding mac address 0x%012lx to port %d in vlan %d\n",
+	MAT_LOG(DEBUG, "adding mac address 0x%012lx to port %d in vlan %d\n",
 	       mac_address, lport, vlan_id);
 #endif
 
@@ -1601,10 +1616,10 @@ int switch_del_mac_entry(int vlan, __u64 mac)
 	fm_macAddressEntry *entries, *p;
 	fm_int nEntries;
 
-	printf("reading mac table before ...\n");
+	MAT_LOG(DEBUG, "reading mac table before ...\n");
 
 	if((entries = malloc(sizeof(fm_macAddressEntry) * FM_MAX_ADDR)) == NULL) {
-		fprintf(stderr, "err allocating space for mac table.\n");
+		MAT_LOG(ERR, "err allocating space for mac table.\n");
 		return -ENOMEM;
 	}
 	if((err = fmGetAddressTable(sw, &nEntries, entries)) != FM_OK) {
@@ -1614,7 +1629,7 @@ int switch_del_mac_entry(int vlan, __u64 mac)
 
 	p = entries;
 	for(i=0; i<nEntries; i++) {
-		printf("mac entry %d: address 0x%012llx, port %d, vlan %d\n", 
+		MAT_LOG(DEBUG, "mac entry %d: address 0x%012llx, port %d, vlan %d\n",
 		        i, p->macAddress, p->port, p->vlanID);
 		p++;
 	}
@@ -1627,14 +1642,14 @@ int switch_del_mac_entry(int vlan, __u64 mac)
 	macEntry.macAddress = mac;
 	macEntry.destMask = FM_DESTMASK_UNUSED;
 #ifdef DEBUG
-	printf("deleting mac entry vlan %d address 0x%012llx \n", vlan, mac);
+	MAT_LOG(DEBUG, "deleting mac entry vlan %d address 0x%012llx \n", vlan, mac);
 #endif /* DEBUG */
 	if((err = fmDeleteAddress(sw, &macEntry)) != FM_OK) {
 		return cleanup("fmAddAddress", err);
 	}
 
 #ifdef DEBUG
-	printf("reading mac table after ...\n");
+	MAT_LOG(DEBUG, "reading mac table after ...\n");
 
 	if((err = fmGetAddressTable(sw, &nEntries, entries)) != FM_OK) {
 		return cleanup("fmAddAddress", err);
@@ -1642,7 +1657,7 @@ int switch_del_mac_entry(int vlan, __u64 mac)
 
 	p = entries;
 	for(i=0; i<nEntries; i++) {
-		printf("mac entry %d: address 0x%012llx, port %d, vlan %d\n", 
+		MAT_LOG(DEBUG, "mac entry %d: address 0x%012llx, port %d, vlan %d\n",
 		        i, p->macAddress, p->port, p->vlanID);
 		p++;
 	}
@@ -1674,7 +1689,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 				condition |= FM_FLOW_MATCH_ETHERTYPE;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_ETHERNET, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_ETHERNET, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -1686,7 +1701,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 				condition |= FM_FLOW_MATCH_VLAN;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_VLAN, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_VLAN, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -1704,7 +1719,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 				condition |= FM_FLOW_MATCH_PROTOCOL;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -1721,7 +1736,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 				condition |= FM_FLOW_MATCH_PROTOCOL;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_TCP, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_TCP, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -1738,7 +1753,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 				condition |= FM_FLOW_MATCH_PROTOCOL;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_UDP, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_UDP, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -1750,7 +1765,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 				condition |= FM_FLOW_MATCH_SRC_PORT;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_METADATA, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_METADATA, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -1760,21 +1775,21 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 			switch(matches[i].field) {
 			case HEADER_VXLAN_VNI:
 				if (configure_deep_inspection()) {
-					fprintf(stderr, "deep inspection\n");
+					MAT_LOG(ERR, "deep inspection\n");
 					err = -EINVAL;
 					break;
 				}
 				condition |= FM_FLOW_MATCH_L4_DEEP_INSPECTION;
 				break;
 			default:
-				fprintf(stderr, "match error in HEADER_VXLAN, field=%d\n", matches[i].field);
+				MAT_LOG(ERR, "match error in HEADER_VXLAN, field=%d\n", matches[i].field);
 				err = -EINVAL;
 				break;
 			}
 
 			break;
 		default:
-			fprintf(stderr, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
+			MAT_LOG(ERR, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
 			err = -EINVAL;
 			break;
 		}
@@ -1786,7 +1801,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 	/* condition = FM_FLOW_TABLE_COND_ALL_12_TUPLE; */
 
 	for (i = 0; actions && actions[i]; i++) {
-		printf("actions[%d] = %d\n", i, actions[i]);
+		MAT_LOG(DEBUG, "actions[%d] = %d\n", i, actions[i]);
 		switch(actions[i]) {
 		case ACTION_COUNT:
 			has_count = FM_ENABLED;
@@ -1795,7 +1810,7 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 	}
 
 #ifdef DEBUG
-	printf("%s: set TCAM table %d to be with count %d\n", __func__, table_id, has_count);
+	MAT_LOG(DEBUG, "%s: set TCAM table %d to be with count %d\n", __func__, table_id, has_count);
 #endif /* DEBUG */
 	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_WITH_COUNT, &has_count);
 	if(err != FM_OK)
@@ -1803,14 +1818,14 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 
 	has_priority = FM_ENABLED; /* fix me */
 #ifdef DEBUG
-	printf("%s: set TCAM table %d to be with priority %d\n", __func__, table_id, has_priority);
+	MAT_LOG(DEBUG, "%s: set TCAM table %d to be with priority %d\n", __func__, table_id, has_priority);
 #endif /* DEBUG */
 	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_WITH_PRIORITY, &has_priority);
 	if(err != FM_OK)
 		return cleanup("fmSetFlowAttribute", err);
 
 #ifdef DEBUG
-	printf("%s: creating rule TCAM table: table %d, condition 0x%llx, maxEntries %d, maxActions %d\n",
+	MAT_LOG(DEBUG, "%s: creating rule TCAM table: table %d, condition 0x%llx, maxEntries %d, maxActions %d\n",
 	       __func__, table_id, condition, size, max_actions);
 #endif /* DEBUG */
 	err = fmCreateFlowTCAMTable(sw, (fm_int)table_id, condition, size, (fm_uint32)max_actions);
@@ -1825,7 +1840,7 @@ int switch_del_TCAM_table(__u32 table_id)
 	fm_status err = 0;
 
 #ifdef DEBUG
-	printf("%s: deleting rule TCAM table %d\n", __func__, table_id);
+	MAT_LOG(DEBUG, "%s: deleting rule TCAM table %d\n", __func__, table_id);
 #endif /* DEBUG */
 	if((err = fmDeleteFlowTCAMTable(sw, (int)table_id)) != FM_OK)
 		return cleanup("fmDeleteFlowTCAMTable", err);
@@ -1847,46 +1862,46 @@ int switch_add_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	    (matches[0].instance != HEADER_INSTANCE_ROUTING_METADATA) ||
 	    (matches[0].field != HEADER_METADATA_ECMP_GROUP_ID) ||
 	    (matches[1].instance)) {
-		fprintf(stderr, "%s: error in matches\n", __func__);
+		MAT_LOG(ERR, "%s: error in matches\n", __func__);
 		return -EINVAL;
 	}
 
 	ecmp_group_id = matches[0].v.u32.value_u32;
 #ifdef DEBUG
-	printf("%s: match EDMP_GROUP_ID: %d\n", __func__, ecmp_group_id);
+	MAT_LOG(DEBUG, "%s: match EDMP_GROUP_ID: %d\n", __func__, ecmp_group_id);
 #endif /* DEBUG */
 	if(ecmp_group_id >= TABLE_NEXTHOP_SIZE) {
-		fprintf(stderr, "%s: invalid ecmp group id %d\n", __func__, ecmp_group_id);
+		MAT_LOG(ERR, "%s: invalid ecmp group id %d\n", __func__, ecmp_group_id);
 		return -EINVAL;
 	}
 
 	if (!actions ||
 	    (actions[0].uid != ACTION_ROUTE) ||
 	    (actions[1].uid)) {
-		fprintf(stderr, "%s: error in actions\n", __func__);
+		MAT_LOG(ERR, "%s: error in actions\n", __func__);
 		return -EINVAL;
 	}
 
 	new_dmac = actions[0].args[0].v.value_u64;
 	new_vlan = actions[0].args[1].v.value_u16;
 	if(new_vlan >= 4096) {
-		fprintf(stderr, "%s: invalid newVLAN %d\n", __func__, new_vlan);
+		MAT_LOG(ERR, "%s: invalid newVLAN %d\n", __func__, new_vlan);
 		return -EINVAL;
 	}
 #ifdef DEBUG
-	printf("%s: action ROUTE(0x%012llx:%u)\n", __func__, new_dmac, new_vlan);
+	MAT_LOG(DEBUG, "%s: action ROUTE(0x%012llx:%u)\n", __func__, new_dmac, new_vlan);
 #endif /* DEBUG */
 
 	if (ecmp_group[ecmp_group_id].hw_group_id == -1) {
 #ifdef DEBUG
-		printf("%s: creating ecmp group %d\n", __func__, ecmp_group_id);
+		MAT_LOG(DEBUG, "%s: creating ecmp group %d\n", __func__, ecmp_group_id);
 #endif /* DEBUG */
 		if((err = fmCreateECMPGroupV2(sw, &hw_group_id, NULL)) != FM_OK)
 			return cleanup("fmDeleteFlowTCAMTable", err);
 		else {
 			ecmp_group[ecmp_group_id].hw_group_id = hw_group_id;
 #ifdef DEBUG
-			printf("%s: created ecmp group %d, hw_group_id %d\n",
+			MAT_LOG(DEBUG, "%s: created ecmp group %d, hw_group_id %d\n",
 			       __func__, ecmp_group_id, hw_group_id);
 #endif /* DEBUG */
 		}
@@ -1902,7 +1917,7 @@ int switch_add_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	arp.vlan = new_vlan;
 	arp.macAddr = new_dmac;
 #ifdef DEBUG
-	printf("%s: adding arp entry (0x%08x:0x%012llx:%u)\n",
+	MAT_LOG(DEBUG, "%s: adding arp entry (0x%08x:0x%012llx:%u)\n",
 	       __func__, arp.ipAddr.addr[0], new_dmac, new_vlan);
 #endif /* DEBUG */
 	if((err = fmAddARPEntry(sw, &arp)) != FM_OK) {
@@ -1918,7 +1933,7 @@ int switch_add_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	nh.trapCode = FM_TRAPCODE_L3_ROUTED_NO_ARP_0;
 
 #ifdef DEBUG
-	printf("%s: adding nh entry (0x%08x:%u) to group %u\n",
+	MAT_LOG(DEBUG, "%s: adding nh entry (0x%08x:%u) to group %u\n",
 	       __func__, nh.addr.addr[0], nh.vlan, ecmp_group_id);
 #endif /* DEBUG */
 	if((err = fmAddECMPGroupNextHops(sw, ecmp_group[ecmp_group_id].hw_group_id, 1, &nh)) != FM_OK) {
@@ -1936,14 +1951,14 @@ static fm_status switch_search_arp_entry(__u16 vlan, __u64 dmac, fm_arpEntry *pa
 
 	if ((err = fmGetARPEntryFirst(sw, &ptr, parp)) != FM_OK) {
 #ifdef DEBUG
-		printf("%s: fmGetARPEntryFirst() returns %d\n", __func__, err);
+		MAT_LOG(DEBUG, "%s: fmGetARPEntryFirst() returns %d\n", __func__, err);
 #endif /* DEBUG */
 		return err;
 	}
 
 	if ((parp->macAddr == dmac) && (parp->vlan == vlan)) {
 #ifdef DEBUG
-		printf("%s: fmGetARPEntryFirst() found arp entry (0x%08x:0x%012llx:%u)\n",
+		MAT_LOG(DEBUG, "%s: fmGetARPEntryFirst() found arp entry (0x%08x:0x%012llx:%u)\n",
 		       __func__, parp->ipAddr.addr[0], dmac, vlan);
 #endif /* DEBUG */
 		return err;
@@ -1954,10 +1969,10 @@ static fm_status switch_search_arp_entry(__u16 vlan, __u64 dmac, fm_arpEntry *pa
 
 #ifdef DEBUG
 	if (err == FM_OK)
-		printf("%s: fmGetARPEntryNext() found arp entry (0x%08x:0x%012llx:%u)\n",
+		MAT_LOG(DEBUG, "%s: fmGetARPEntryNext() found arp entry (0x%08x:0x%012llx:%u)\n",
 		       __func__, parp->ipAddr.addr[0], dmac, vlan);
 	else
-		printf("%s: fmGetARPEntryNext() returns %d\n", __func__, err);
+		MAT_LOG(DEBUG, "%s: fmGetARPEntryNext() returns %d\n", __func__, err);
 #endif /* DEBUG */
 
 	return err;
@@ -1975,28 +1990,28 @@ int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 
 	ecmp_group_id = matches[0].v.u32.value_u32;
 	if(ecmp_group_id >= TABLE_NEXTHOP_SIZE) {
-		fprintf(stderr, "%s: invalid ecmp group id %d\n", __func__, ecmp_group_id);
+		MAT_LOG(ERR, "%s: invalid ecmp group id %d\n", __func__, ecmp_group_id);
 		return -EINVAL;
 	}
 #ifdef DEBUG
-	printf("%s: match EDMP_GROUP_ID: %d\n", __func__, ecmp_group_id);
+	MAT_LOG(DEBUG, "%s: match EDMP_GROUP_ID: %d\n", __func__, ecmp_group_id);
 #endif /* DEBUG */
 	hw_group_id = ecmp_group[ecmp_group_id].hw_group_id;
 
 	new_dmac = actions[0].args[0].v.value_u64;
 	new_vlan = actions[0].args[1].v.value_u16;
 #ifdef DEBUG
-	printf("%s: action ROUTE(0x%012llx:%u)\n", __func__, new_dmac, new_vlan);
+	MAT_LOG(DEBUG, "%s: action ROUTE(0x%012llx:%u)\n", __func__, new_dmac, new_vlan);
 #endif /* DEBUG */
 
 	if ((err = switch_search_arp_entry(new_vlan, new_dmac, &arp)) != FM_OK) {
-		fprintf(stderr, "%s: unable to find arp entry(dmac = 0x%12llx, vlan = %u)\n",
+		MAT_LOG(ERR, "%s: unable to find arp entry(dmac = 0x%12llx, vlan = %u)\n",
 			__func__, new_dmac, new_vlan);
 		return -ENOENT;
 	}
 
 #ifdef DEBUG
-	printf("%s: deleting arp entry (0x%08x:0x%012llx:%u)\n",
+	MAT_LOG(DEBUG, "%s: deleting arp entry (0x%08x:0x%012llx:%u)\n",
 	       __func__, arp.ipAddr.addr[0], new_dmac, new_vlan);
 #endif /* DEBUG */
 	if((err = fmDeleteARPEntry(sw, &arp)) != FM_OK) {
@@ -2012,7 +2027,7 @@ int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	nh.trapCode = FM_TRAPCODE_L3_ROUTED_NO_ARP_0;
 
 #ifdef DEBUG
-	printf("%s: deleting nh entry (0x%08x:%u) from group %u\n",
+	MAT_LOG(DEBUG, "%s: deleting nh entry (0x%08x:%u) from group %u\n",
 	       __func__, nh.addr.addr[0], nh.vlan, ecmp_group_id);
 #endif /* DEBUG */
 	if((err = fmDeleteECMPGroupNextHops(sw, hw_group_id, 1, &nh)) != FM_OK)
@@ -2020,13 +2035,13 @@ int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 
 	ecmp_group[ecmp_group_id].num_nhs --;
 #ifdef DEBUG
-	printf("%s: ecmp group %u has %d entries\n", __func__, ecmp_group_id, ecmp_group[ecmp_group_id].num_nhs);
+	MAT_LOG(DEBUG, "%s: ecmp group %u has %d entries\n", __func__, ecmp_group_id, ecmp_group[ecmp_group_id].num_nhs);
 #endif /* DEBUG */
 
 #if 0
 	if (ecmp_group[ecmp_group_id].num_nhs == 0) {
 #ifdef DEBUG
-		printf("%s: deleting ecmp group %u\n", __func__, ecmp_group_id);
+		MAT_LOG(DEBUG, "%s: deleting ecmp group %u\n", __func__, ecmp_group_id);
 #endif /* DEBUG */
 		if ((err = fmDeleteECMPGroup(sw, hw_group_id)) != FM_OK)
 			return cleanup("fmDeleteECMPGroup", err);
@@ -2052,7 +2067,7 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 
 	listeners_size = sizeof(fm_mcastGroupListener) * (__u32)num_mcast_listeners;
 	if ((listeners = malloc(listeners_size)) == NULL) {
-		fprintf(stderr, "%s: unable to allocate listener list\n", __func__);
+		MAT_LOG(ERR, "%s: unable to allocate listener list\n", __func__);
 		return -ENOMEM;
 	}
 	bzero(listeners, listeners_size);
@@ -2102,7 +2117,7 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 	}
 
 #ifdef DEBUG
-	printf("%s: create and activate mcast group %d lport %d\n", __func__, *mcast_group, *mcast_lport);
+	MAT_LOG(DEBUG, "%s: create and activate mcast group %d lport %d\n", __func__, *mcast_group, *mcast_lport);
 #endif /* DEBUG */
 
 	for (i = 0; i < num_mcast_listeners; i++) {
@@ -2119,7 +2134,7 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 			break;
 		default:
 			err = -EINVAL;
-			fprintf(stderr, "%s: unknown listener type %d\n", __func__, listeners[i].listenerType);
+			MAT_LOG(ERR, "%s: unknown listener type %d\n", __func__, listeners[i].listenerType);
 			goto done;
 		}
 
@@ -2142,7 +2157,7 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 	}
 
 #ifdef DEBUG
-	printf("%s: add %d listeners to  mcast group %d\n", __func__, num_mcast_listeners, *mcast_group);
+	MAT_LOG(DEBUG, "%s: add %d listeners to  mcast group %d\n", __func__, num_mcast_listeners, *mcast_group);
 #endif /* DEBUG */
 
 done:
@@ -2221,7 +2236,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.src = matches[i].v.u64.value_u64;
 				condVal.srcMask = matches[i].v.u64.mask_u64;
 #ifdef DEBUG
-				printf("%s: match SRC_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.src, condVal.srcMask);
+				MAT_LOG(DEBUG, "%s: match SRC_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.src, condVal.srcMask);
 #endif /* DEBUG */
 				break;
 			case HEADER_ETHERNET_DST_MAC:
@@ -2229,7 +2244,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.dst = matches[i].v.u64.value_u64;
 				condVal.dstMask = matches[i].v.u64.mask_u64;
 #ifdef DEBUG
-				printf("%s: match DST_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.dst, condVal.dstMask);
+				MAT_LOG(DEBUG, "%s: match DST_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.dst, condVal.dstMask);
 #endif /* DEBUG */
 				break;
 			case HEADER_ETHERNET_ETHERTYPE:
@@ -2237,11 +2252,11 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.ethType = matches[i].v.u16.value_u16;
 				condVal.ethTypeMask = matches[i].v.u16.mask_u16;
 #ifdef DEBUG
-				printf("%s: match ETHERTYPE(0x%04x:0x%04x)\n", __func__, condVal.ethType, condVal.ethTypeMask);
+				MAT_LOG(DEBUG, "%s: match ETHERTYPE(0x%04x:0x%04x)\n", __func__, condVal.ethType, condVal.ethTypeMask);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_ETHERNET, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_ETHERNET, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2254,11 +2269,11 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.vlanId = matches[i].v.u16.value_u16;
 				condVal.vlanIdMask = matches[i].v.u16.mask_u16;
 #ifdef DEBUG
-				printf("%s: match VLAN(0x%04x:0x%04x)\n", __func__, condVal.vlanId, condVal.vlanIdMask);
+				MAT_LOG(DEBUG, "%s: match VLAN(0x%04x:0x%04x)\n", __func__, condVal.vlanId, condVal.vlanIdMask);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_VLAN_OUTER, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_VLAN_OUTER, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2273,7 +2288,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.srcIpMask.addr[0] = matches[i].v.u32.mask_u32;
 				condVal.srcIpMask.isIPv6 = FALSE;
 #ifdef DEBUG
-				printf("%s: match SRC_IP(0x%08x:0x%08x)\n", __func__, condVal.srcIp.addr[0], condVal.srcIpMask.addr[0]);
+				MAT_LOG(DEBUG, "%s: match SRC_IP(0x%08x:0x%08x)\n", __func__, condVal.srcIp.addr[0], condVal.srcIpMask.addr[0]);
 #endif /* DEBUG */
 
 				break;
@@ -2284,7 +2299,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.dstIpMask.addr[0] = matches[i].v.u32.mask_u32;
 				condVal.dstIpMask.isIPv6 = FALSE;
 #ifdef DEBUG
-				printf("%s: match DST_IP(0x%08x:0x%08x)\n", __func__, condVal.dstIp.addr[0], condVal.dstIpMask.addr[0]);
+				MAT_LOG(DEBUG, "%s: match DST_IP(0x%08x:0x%08x)\n", __func__, condVal.dstIp.addr[0], condVal.dstIpMask.addr[0]);
 #endif /* DEBUG */
 
 				break;
@@ -2293,11 +2308,11 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.protocol = (fm_byte)matches[i].v.u16.value_u16;
 				condVal.protocolMask = (fm_byte)matches[i].v.u16.mask_u16;
 #ifdef DEBUG
-				printf("%s: match PROTOCOL(0x%08x:0x%08x)\n", __func__, condVal.protocol, condVal.protocolMask);
+				MAT_LOG(DEBUG, "%s: match PROTOCOL(0x%08x:0x%08x)\n", __func__, condVal.protocol, condVal.protocolMask);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_IPV4, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_IPV4, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2318,18 +2333,18 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				cond |= FM_FLOW_MATCH_L4_SRC_PORT;
 				condVal.L4SrcStart = matches[i].v.u16.value_u16;
 #ifdef DEBUG
-				printf("%s: match L4_SRC_PORT(%d)\n", __func__, condVal.L4SrcStart);
+				MAT_LOG(DEBUG, "%s: match L4_SRC_PORT(%d)\n", __func__, condVal.L4SrcStart);
 #endif /* DEBUG */
 				break;
 			case HEADER_TCP_DST_PORT:
 				cond |= FM_FLOW_MATCH_L4_DST_PORT;
 				condVal.L4DstStart = matches[i].v.u16.value_u16;
 #ifdef DEBUG
-				printf("%s: match L4_DST_PORT(%d)\n", __func__, condVal.L4DstStart);
+				MAT_LOG(DEBUG, "%s: match L4_DST_PORT(%d)\n", __func__, condVal.L4DstStart);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_TCP/UDP, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_TCP/UDP, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2341,11 +2356,11 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				cond |= FM_FLOW_MATCH_SRC_PORT;
 				condVal.logicalPort = (fm_int)matches[i].v.u32.value_u32;
 #ifdef DEBUG
-				printf("%s: match SRC_PORT(%d)\n", __func__, condVal.logicalPort);
+				MAT_LOG(DEBUG, "%s: match SRC_PORT(%d)\n", __func__, condVal.logicalPort);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_INGRESS_PORT_METADATA, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_INGRESS_PORT_METADATA, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2360,17 +2375,17 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				err = set_vni_cond(vni, vni_mask, &cond, &condVal);
 
 #ifdef DEBUG
-				printf("%s: match VNI/MASK (%u/0x%x)\n",
+				MAT_LOG(DEBUG, "%s: match VNI/MASK (%u/0x%x)\n",
 				       __func__, vni, vni_mask);
 #endif
 				break;
 			default:
-				fprintf(stderr, "match error in HEADER_INSTANCE_VXLAN, field=%d\n", matches[i].field);
+				MAT_LOG(ERR, "match error in HEADER_INSTANCE_VXLAN, field=%d\n", matches[i].field);
 				err = -EINVAL;
 			}
 			break;
 		default:
-			fprintf(stderr, "%s: match error unsupported instance %d\n", __func__, matches[i].instance);
+			MAT_LOG(ERR, "%s: match error unsupported instance %d\n", __func__, matches[i].instance);
 			err = -EINVAL;
 			break;
 		}
@@ -2385,13 +2400,13 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 					actions[i].args[1].v.value_u8,
 					actions[i].args[2].v.value_u8);
 			if (param.logicalPort < 0) {
-				fprintf(stderr, "Error: pci to log port\n");
+				MAT_LOG(ERR, "Error: pci to log port\n");
 				err = -EINVAL;
 				break;
 			}
 #ifdef VXLAN_MCAST
 			if (num_mcast_listeners >= MAX_LISTENERS_PER_GROUP) {
-				fprintf(stderr, "%s: too many destinations\n", __func__);
+				MAT_LOG(ERR, "%s: too many destinations\n", __func__);
 				err = -EINVAL;
 				break;
 			}
@@ -2403,7 +2418,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			num_mcast_listeners++;
 #endif /* VXLAN_MCAST */
 #ifdef DEBUG
-			printf("%s: action FORWARD_VSI(%d)\n", __func__, param.logicalPort);
+			MAT_LOG(DEBUG, "%s: action FORWARD_VSI(%d)\n", __func__, param.logicalPort);
 #endif
 			break;
 		case ACTION_SET_EGRESS_PORT:
@@ -2411,7 +2426,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			param.logicalPort = (fm_int)actions[i].args[0].v.value_u32;
 #ifdef VXLAN_MCAST
 			if (num_mcast_listeners >= MAX_LISTENERS_PER_GROUP) {
-				fprintf(stderr, "%s: too many destinations\n", __func__);
+				MAT_LOG(ERR, "%s: too many destinations\n", __func__);
 				err = -EINVAL;
 				break;
 			}
@@ -2423,72 +2438,72 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			num_mcast_listeners++;
 #endif /* VXLAN_MCAST */
 #ifdef DEBUG
-			printf("%s: action FORWARD(%d)\n", __func__, param.logicalPort);
+			MAT_LOG(DEBUG, "%s: action FORWARD(%d)\n", __func__, param.logicalPort);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_DST_MAC:
 			act |= FM_FLOW_ACTION_SET_DMAC;
 			param.dmac = actions[i].args[0].v.value_u64;
 #ifdef DEBUG
-			printf("%s: action SET_DMAC(0x%012llx)\n", __func__, param.dmac);
+			MAT_LOG(DEBUG, "%s: action SET_DMAC(0x%012llx)\n", __func__, param.dmac);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_SRC_MAC:
 			act |= FM_FLOW_ACTION_SET_SMAC;
 			param.smac = actions[i].args[0].v.value_u64;
 #ifdef DEBUG
-			printf("%s: action SET_SMAC(0x%012llx)\n", __func__, param.smac);
+			MAT_LOG(DEBUG, "%s: action SET_SMAC(0x%012llx)\n", __func__, param.smac);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_VLAN:
 			act |= FM_FLOW_ACTION_SET_VLAN;
 			param.vlan = actions[i].args[0].v.value_u16;
 #ifdef DEBUG
-			printf("%s: action SET_VLAN(%d)\n", __func__, param.vlan);
+			MAT_LOG(DEBUG, "%s: action SET_VLAN(%d)\n", __func__, param.vlan);
 #endif /* DEBUG */
 			break;
 		case ACTION_NORMAL:
 			act |= FM_FLOW_ACTION_FORWARD_NORMAL;
 #ifdef DEBUG
-			printf("%s: action FORWARD_NORMAL\n", __func__);
+			MAT_LOG(DEBUG, "%s: action FORWARD_NORMAL\n", __func__);
 #endif /* DEBUG */
 			break;
 		case ACTION_TRAP:
 			act |= FM_FLOW_ACTION_TRAP;
 #ifdef DEBUG
-			printf("%s: action TRAP\n", __func__);
+			MAT_LOG(DEBUG, "%s: action TRAP\n", __func__);
 #endif /* DEBUG */
 			break;
 		case ACTION_DROP_PACKET:
 			act |= FM_FLOW_ACTION_DROP;
 #ifdef DEBUG
-			printf("%s: action DROP\n", __func__);
+			MAT_LOG(DEBUG, "%s: action DROP\n", __func__);
 #endif /* DEBUG */
 			break;
 		case ACTION_COUNT:
 			act |= FM_FLOW_ACTION_COUNT;
 #ifdef DEBUG
-			printf("%s: action COUNT\n", __func__);
+			MAT_LOG(DEBUG, "%s: action COUNT\n", __func__);
 #endif /* DEBUG */
 			break;
 		case ACTION_ROUTE_VIA_ECMP:
 			act |= FM_FLOW_ACTION_ROUTE;
 			group_id = actions[i].args[0].v.value_u32;
 #ifdef DEBUG
-			printf("%s: action ROUTE(%d)\n", __func__, group_id);
+			MAT_LOG(DEBUG, "%s: action ROUTE(%d)\n", __func__, group_id);
 #endif /* DEBUG */
 			if (group_id >= TABLE_NEXTHOP_SIZE) {
-				fprintf(stderr, "%s: action route_via_ecmp ecmp group id %d out of range\n",
+				MAT_LOG(ERR, "%s: action route_via_ecmp ecmp group id %d out of range\n",
 					__func__, group_id);
 				err = -EINVAL;
 			} else if (ecmp_group[group_id].hw_group_id == -1) {
-				fprintf(stderr, "%s: no nexthop entry for ecmp group %d\n",
+				MAT_LOG(ERR, "%s: no nexthop entry for ecmp group %d\n",
 					__func__, group_id);
 				err = -EINVAL;
 			} else {
 				param.ecmpGroup = ecmp_group[group_id].hw_group_id;
 #ifdef DEBUG
-				printf("%s: action ROUTE(%d) hw_group_id %d\n",
+				MAT_LOG(DEBUG, "%s: action ROUTE(%d) hw_group_id %d\n",
 				       __func__, group_id, param.ecmpGroup);
 #endif /* DEBUG */
 			}
@@ -2500,7 +2515,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			param.tableIndex = (fm_int)actions[i].args[0].v.value_u16 - TABLE_DYN_START + 1;
 			param.flowId = 0;
 #ifdef DEBUG
-			printf("%s: action FORWARD_TO_TE(%d)\n", __func__, param.tableIndex);
+			MAT_LOG(DEBUG, "%s: action FORWARD_TO_TE(%d)\n", __func__, param.tableIndex);
 #endif /* DEBUG */
 			break;
 		case ACTION_FORWARD_DIRECT_TO_TE_A:
@@ -2510,7 +2525,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			param.flowId = (fm_int)actions[i].args[1].v.value_u16;
 #ifdef VXLAN_MCAST
 			if (num_mcast_listeners >= MAX_LISTENERS_PER_GROUP) {
-				fprintf(stderr, "%s: too many destinations\n", __func__);
+				MAT_LOG(ERR, "%s: too many destinations\n", __func__);
 				err = -EINVAL;
 				break;
 			}
@@ -2522,11 +2537,11 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			num_mcast_listeners++;
 #endif /* VXLAN_MCAST */
 #ifdef DEBUG
-			printf("%s: action FORWARD_DIRECT_TO_TE(%d, %d)\n", __func__, param.tableIndex, param.flowId);
+			MAT_LOG(DEBUG, "%s: action FORWARD_DIRECT_TO_TE(%d, %d)\n", __func__, param.tableIndex, param.flowId);
 #endif /* DEBUG */
 			break;
 		default:
-			fprintf(stderr, "%s: unsupported action %d\n", __func__, actions[i].uid);
+			MAT_LOG(ERR, "%s: unsupported action %d\n", __func__, actions[i].uid);
 			err = -EINVAL;
 			break;
 		}
@@ -2538,7 +2553,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 #ifdef VXLAN_MCAST
 	if (num_mcast_listeners > 1) {
 		if ((err = switch_construct_mcast_group(&mcast_lport, &mcast_group, num_mcast_listeners, mcast_listeners)) < 0) {
-			fprintf(stderr, "%s: error constructing multicast group %d\n", __func__, err);
+			MAT_LOG(ERR, "%s: error constructing multicast group %d\n", __func__, err);
 			return err;
 		}
 
@@ -2549,7 +2564,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 	}
 #endif /* VXLAN_MCAST */
 #ifdef DEBUG
-	printf("%s: add flow : table %d, cond 0x%llx, act 0x%llx\n",
+	MAT_LOG(DEBUG, "%s: add flow : table %d, cond 0x%llx, act 0x%llx\n",
 	       __func__, table_id, cond, act);
 #endif /* DEBUG */
 	if((err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
@@ -2559,7 +2574,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 	}
 #ifdef DEBUG
 	else
-		printf("%s: flow flowid %d added to table %d\n", __func__, *flowid, table_id);
+		MAT_LOG(DEBUG, "%s: flow flowid %d added to table %d\n", __func__, *flowid, table_id);
 #endif /* DEBUG */
 
 #ifdef VXLAN_MCAST
@@ -2579,7 +2594,7 @@ int switch_del_TCAM_rule_entry(__u32 flowid, __u32 switch_table_id)
 #endif /* VXLAN_MCAST */
 
 #ifdef DEBUG
-	printf("%s: deleting flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
+	MAT_LOG(DEBUG, "%s: deleting flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
 #endif /* DEBUG */
 	if((err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid)) != FM_OK) {
 		return cleanup("fmDeleteFlow", err);
@@ -2621,7 +2636,7 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 				condition |= FM_FLOW_MATCH_VNI;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_VXLAN, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_VXLAN, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2636,7 +2651,7 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 				condition |= FM_FLOW_MATCH_DST_MAC;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_ETHERNET, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_ETHERNET, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2651,7 +2666,7 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 				condition |= FM_FLOW_MATCH_DST_IP;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2666,7 +2681,7 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 				condition |= FM_FLOW_MATCH_L4_DST_PORT;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_UDP, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_UDP, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2681,7 +2696,7 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 				condition |= FM_FLOW_MATCH_L4_DST_PORT;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_TCP, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_TCP, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2693,7 +2708,7 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 				te_direct = TRUE;
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_DIRECT_INDEX_METADATA, field=%d\n",
+				MAT_LOG(ERR, "%s: match error in HEADER_DIRECT_INDEX_METADATA, field=%d\n",
 				        __func__, matches[i].field);
 				err = -EINVAL;
 				break;
@@ -2701,14 +2716,14 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 
 			break;
 		default:
-			fprintf(stderr, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
+			MAT_LOG(ERR, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
 			err = -EINVAL;
 			break;
 		}
 	}
 
 	if (te_direct && (condition != 0)) {
-		fprintf(stderr, "%s: direct flow table can not have match conditions\n", __func__);
+		MAT_LOG(ERR, "%s: direct flow table can not have match conditions\n", __func__);
 		err = -EINVAL;
 	}
 
@@ -2716,7 +2731,7 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 		return err;
 
 	for (i = 0; actions && actions[i]; i++) {
-		printf("actions[%d] = %d\n", i, actions[i]);
+		MAT_LOG(DEBUG, "actions[%d] = %d\n", i, actions[i]);
 		switch(actions[i]) {
 		case ACTION_TUNNEL_DECAP:
 		case ACTION_TUNNEL_DECAP_NSH:
@@ -2730,13 +2745,13 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 	}
 
 	if (te_encap && te_decap) {
-		fprintf(stderr, "%s: a te flow table can not have both encap and decap actions\n", __func__);
+		MAT_LOG(ERR, "%s: a te flow table can not have both encap and decap actions\n", __func__);
 		err = -EINVAL;
 	}
 
 	if(!te_encap && !te_decap) {
 #ifdef DEBUG
-		printf("%s: TE table has neither encap nor decap action, default to encap\n", __func__);
+		MAT_LOG(DEBUG, "%s: TE table has neither encap nor decap action, default to encap\n", __func__);
 #endif /* DEBUG */
 		te_encap = TRUE;
 	}
@@ -2747,21 +2762,21 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 	/* condition = FM_FLOW_TABLE_COND_ALL_12_TUPLE; */
 
 #ifdef DEBUG
-	printf("%s: setting flow table attribute FM_FLOW_TABLE_TUNNEL_ENGINE %d\n", __func__, te);
+	MAT_LOG(DEBUG, "%s: setting flow table attribute FM_FLOW_TABLE_TUNNEL_ENGINE %d\n", __func__, te);
 #endif /* DEBUG */
 	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_TUNNEL_ENGINE, &te);
 	if(err != FM_OK)
 		return cleanup("fmSetFlowAttribute", err);
 
 #ifdef DEBUG
-	printf("%s: setting flow table attribute FM_FLOW_TABLE_TUNNEL_ENCAP %d\n", __func__, te_encap);
+	MAT_LOG(DEBUG, "%s: setting flow table attribute FM_FLOW_TABLE_TUNNEL_ENCAP %d\n", __func__, te_encap);
 #endif /* DEBUG */
 	err = fmSetFlowAttribute(sw, (fm_int)table_id, FM_FLOW_TABLE_TUNNEL_ENCAP, &te_encap);
 	if(err != FM_OK)
 		return cleanup("fmSetFlowAttribute", err);
 
 #ifdef DEBUG
-	printf("%s: creating flow TE table: table %d, direct %d, condition 0x%llx, maxEntries %d, maxActions %d\n",
+	MAT_LOG(DEBUG, "%s: creating flow TE table: table %d, direct %d, condition 0x%llx, maxEntries %d, maxActions %d\n",
 	       __func__, table_id, te_direct, condition, size, max_actions);
 #endif /* DEBUG */
 
@@ -2786,7 +2801,7 @@ int switch_del_TE_table(__u32 table_id)
 	fm_status err = 0;
 
 #ifdef DEBUG
-	printf("%s: deleting flow TE table %d\n", __func__, table_id);
+	MAT_LOG(DEBUG, "%s: deleting flow TE table %d\n", __func__, table_id);
 #endif /* DEBUG */
 	if((err = fmDeleteFlowTETable(sw, (int)table_id)) != FM_OK)
 		return cleanup("fmDeleteFlowTETable", err);
@@ -2832,7 +2847,7 @@ set_nsh_encap_action(__u32 dst_ip, __u32 src_ip, __u32 vni, __u16 src_port,
 	param->outerNgeData[5] = 0x0;
 
 #ifdef DEBUG
-	printf("%s: action TUNNEL_ENCAP_NSH(0x%08x,0x%08x,%d,%d,%d,%d,%d)\n",
+	MAT_LOG(DEBUG, "%s: action TUNNEL_ENCAP_NSH(0x%08x,0x%08x,%d,%d,%d,%d,%d)\n",
 	       __func__, dst_ip, src_ip, vni, src_port, dst_port,
 	       service_index, service_path_id);
 #endif
@@ -2861,11 +2876,11 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 				cond |= FM_FLOW_MATCH_VNI;
 				condVal.vni = matches[i].v.u32.value_u32;
 #ifdef DEBUG
-				printf("%s: match VNI(%d)\n", __func__, condVal.vni);
+				MAT_LOG(DEBUG, "%s: match VNI(%d)\n", __func__, condVal.vni);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_VXLAN, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_VXLAN, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2878,7 +2893,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 				condVal.src = matches[i].v.u64.value_u64;
 				condVal.srcMask = matches[i].v.u64.mask_u64;
 #ifdef DEBUG
-				printf("%s: match SRC_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.src, condVal.srcMask);
+				MAT_LOG(DEBUG, "%s: match SRC_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.src, condVal.srcMask);
 #endif /* DEBUG */
 				break;
 			case HEADER_ETHERNET_DST_MAC:
@@ -2886,11 +2901,11 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 				condVal.dst = matches[i].v.u64.value_u64;
 				condVal.dstMask = matches[i].v.u64.mask_u64;
 #ifdef DEBUG
-				printf("%s: match DST_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.dst, condVal.dstMask);
+				MAT_LOG(DEBUG, "%s: match DST_MAC(0x%016llx:0x%016llx)\n", __func__, condVal.dst, condVal.dstMask);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_ETHERNET, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_ETHERNET, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2905,7 +2920,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 				condVal.srcIpMask.addr[0] = matches[i].v.u32.mask_u32;
 				condVal.srcIpMask.isIPv6 = FALSE;
 #ifdef DEBUG
-				printf("%s: match SRC_IP(0x%08x:0x%08x)\n", __func__, condVal.srcIp.addr[0], condVal.srcIpMask.addr[0]);
+				MAT_LOG(DEBUG, "%s: match SRC_IP(0x%08x:0x%08x)\n", __func__, condVal.srcIp.addr[0], condVal.srcIpMask.addr[0]);
 #endif /* DEBUG */
 
 				break;
@@ -2916,12 +2931,12 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 				condVal.dstIpMask.addr[0] = matches[i].v.u32.mask_u32;
 				condVal.dstIpMask.isIPv6 = FALSE;
 #ifdef DEBUG
-				printf("%s: match DST_IP(0x%08x:0x%08x)\n", __func__, condVal.dstIp.addr[0], condVal.dstIpMask.addr[0]);
+				MAT_LOG(DEBUG, "%s: match DST_IP(0x%08x:0x%08x)\n", __func__, condVal.dstIp.addr[0], condVal.dstIpMask.addr[0]);
 #endif /* DEBUG */
 
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_IPV4, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_IPV4, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2934,18 +2949,18 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 				cond |= FM_FLOW_MATCH_L4_SRC_PORT;
 				condVal.L4SrcStart = matches[i].v.u16.value_u16;
 #ifdef DEBUG
-				printf("%s: match L4_SRC_PORT(%d)\n", __func__, condVal.L4SrcStart);
+				MAT_LOG(DEBUG, "%s: match L4_SRC_PORT(%d)\n", __func__, condVal.L4SrcStart);
 #endif /* DEBUG */
 				break;
 			case HEADER_TCP_DST_PORT:
 				cond |= FM_FLOW_MATCH_L4_DST_PORT;
 				condVal.L4DstStart = matches[i].v.u16.value_u16;
 #ifdef DEBUG
-				printf("%s: match L4_DST_PORT(%d)\n", __func__, condVal.L4DstStart);
+				MAT_LOG(DEBUG, "%s: match L4_DST_PORT(%d)\n", __func__, condVal.L4DstStart);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_INSTANCE_TCP/UDP, field=%d\n", __func__, matches[i].field);
+				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_TCP/UDP, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
 				break;
 			}
@@ -2956,11 +2971,11 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 			case HEADER_METADATA_DIRECT_INDEX:
 #ifdef DEBUG
 				direct_idx = matches[i].v.u16.value_u16;
-				printf("%s: match HEADER_METADATA_DIRECT_INDEX(%d)\n", __func__, direct_idx);
+				MAT_LOG(DEBUG, "%s: match HEADER_METADATA_DIRECT_INDEX(%d)\n", __func__, direct_idx);
 #endif /* DEBUG */
 				break;
 			default:
-				fprintf(stderr, "%s: match error in HEADER_DIRECT_INDEX_METADATA, field=%d\n",
+				MAT_LOG(ERR, "%s: match error in HEADER_DIRECT_INDEX_METADATA, field=%d\n",
 				        __func__, matches[i].field);
 				err = -EINVAL;
 				break;
@@ -2968,7 +2983,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 
 			break;
 		default:
-			fprintf(stderr, "%s: match error unsupported instance %d\n", __func__, matches[i].instance);
+			MAT_LOG(ERR, "%s: match error unsupported instance %d\n", __func__, matches[i].instance);
 			err = -EINVAL;
 			break;
 		}
@@ -2988,7 +3003,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 			break;
 		case ACTION_TUNNEL_DECAP_NSH:
 #ifdef DEBUG
-			printf("%s: action TUNNEL_DECAP_NSH\n", __func__);
+			MAT_LOG(DEBUG, "%s: action TUNNEL_DECAP_NSH\n", __func__);
 #endif
 			break;
 		case ACTION_TUNNEL_ENCAP:
@@ -3007,7 +3022,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 			param.outerL4Src = actions[i].args[3].v.value_u16;
 			param.outerL4Dst = actions[i].args[4].v.value_u16;
 #ifdef DEBUG
-			printf("%s: action TUNNEL_ENCAP(0x%08x,0x%08x,%d,%d,%d)\n", __func__,
+			MAT_LOG(DEBUG, "%s: action TUNNEL_ENCAP(0x%08x,0x%08x,%d,%d,%d)\n", __func__,
 			       param.outerDip.addr[0],
 			       param.outerSip.addr[0],
 			       param.outerVni,
@@ -3017,42 +3032,42 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 			break;
 		case ACTION_TUNNEL_DECAP:
 #ifdef DEBUG
-			printf("%s: action TUNNEL_DECAP\n", __func__); 
+			MAT_LOG(DEBUG, "%s: action TUNNEL_DECAP\n", __func__);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_EGRESS_PORT:
 			act |= FM_FLOW_ACTION_FORWARD;
 			param.logicalPort = (fm_int)actions[i].args[0].v.value_u32;
 #ifdef DEBUG
-			printf("%s: action FORWARD(%d)\n", __func__, param.logicalPort);
+			MAT_LOG(DEBUG, "%s: action FORWARD(%d)\n", __func__, param.logicalPort);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_DST_MAC:
 			act |= FM_FLOW_ACTION_SET_DMAC;
 			param.dmac = actions[i].args[0].v.value_u64;
 #ifdef DEBUG
-			printf("%s: action SET_DMAC(0x%012llx)\n", __func__, param.dmac);
+			MAT_LOG(DEBUG, "%s: action SET_DMAC(0x%012llx)\n", __func__, param.dmac);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_SRC_MAC:
 			act |= FM_FLOW_ACTION_SET_SMAC;
 			param.smac = actions[i].args[0].v.value_u64;
 #ifdef DEBUG
-			printf("%s: action SET_SMAC(0x%012llx)\n", __func__, param.smac);
+			MAT_LOG(DEBUG, "%s: action SET_SMAC(0x%012llx)\n", __func__, param.smac);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_IPV4_DST_IP:
 			act |= FM_FLOW_ACTION_SET_DIP;
 			param.dip.addr[0] = actions[i].args[0].v.value_u32;
 #ifdef DEBUG
-			printf("%s: action SET_DIP(0x%08x)\n", __func__, param.dip.addr[0]);
+			MAT_LOG(DEBUG, "%s: action SET_DIP(0x%08x)\n", __func__, param.dip.addr[0]);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_IPV4_SRC_IP:
 			act |= FM_FLOW_ACTION_SET_SIP;
 			param.sip.addr[0] = actions[i].args[0].v.value_u32;
 #ifdef DEBUG
-			printf("%s: action SET_SIP(0x%08x)\n", __func__, param.sip.addr[0]);
+			MAT_LOG(DEBUG, "%s: action SET_SIP(0x%08x)\n", __func__, param.sip.addr[0]);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_TCP_DST_PORT:
@@ -3060,7 +3075,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 			act |= FM_FLOW_ACTION_SET_L4DST;
 			param.l4Dst = actions[i].args[0].v.value_u16;
 #ifdef DEBUG
-			printf("%s: action SET_L4DST(%d)\n", __func__, param.l4Dst);
+			MAT_LOG(DEBUG, "%s: action SET_L4DST(%d)\n", __func__, param.l4Dst);
 #endif /* DEBUG */
 			break;
 		case ACTION_SET_TCP_SRC_PORT:
@@ -3068,17 +3083,17 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 			act |= FM_FLOW_ACTION_SET_L4SRC;
 			param.l4Src = actions[i].args[0].v.value_u16;
 #ifdef DEBUG
-			printf("%s: action SET_L4SRC(%d)\n", __func__, param.l4Src);
+			MAT_LOG(DEBUG, "%s: action SET_L4SRC(%d)\n", __func__, param.l4Src);
 #endif /* DEBUG */
 			break;
 		case ACTION_COUNT:
 			act |= FM_FLOW_ACTION_COUNT;
 #ifdef DEBUG
-			printf("%s: action COUNT\n", __func__);
+			MAT_LOG(DEBUG, "%s: action COUNT\n", __func__);
 #endif /* DEBUG */
 			break;
 		default:
-			fprintf(stderr, "%s: unsupported action %d\n", __func__, actions[i].uid);
+			MAT_LOG(ERR, "%s: unsupported action %d\n", __func__, actions[i].uid);
 			err = -EINVAL;
 			break;
 		}
@@ -3088,7 +3103,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 		return err;
 
 #ifdef DEBUG
-	printf("%s: add TE flow : table %d, cond 0x%llx, act 0x%llx\n",
+	MAT_LOG(DEBUG, "%s: add TE flow : table %d, cond 0x%llx, act 0x%llx\n",
 	       __func__, table_id, cond, act);
 #endif /* DEBUG */
 	if((err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
@@ -3098,7 +3113,7 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 	}
 #ifdef DEBUG
 	else
-		printf("%s: flow flowid %d added to table %d\n", __func__, *flowid, table_id);
+		MAT_LOG(DEBUG, "%s: flow flowid %d added to table %d\n", __func__, *flowid, table_id);
 #endif /* DEBUG */
 
 	return 0;
@@ -3109,7 +3124,7 @@ int switch_del_TE_rule_entry(__u32 flowid, __u32 switch_table_id)
 	fm_status err = 0;
 
 #ifdef DEBUG
-	printf("%s: deleting TE flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
+	MAT_LOG(DEBUG, "%s: deleting TE flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
 #endif /* DEBUG */
 	if((err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid)) != FM_OK) {
 		return cleanup("fmDeleteFlow", err);

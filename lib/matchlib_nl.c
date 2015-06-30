@@ -57,6 +57,7 @@
 #include "if_match.h"
 #include "matchlib.h"
 #include "matchlib_nl.h"
+#include "matlog.h"
 
 struct nl_cache *link_cache;
 int verbose = 0;
@@ -119,7 +120,7 @@ struct net_mat_hdr *match_nl_get_headers(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
 			goto out;
 		}
 
@@ -155,7 +156,7 @@ struct net_mat_action *match_nl_get_actions(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
 			goto out;
 		}
 
@@ -191,7 +192,7 @@ struct net_mat_tbl *match_nl_get_tables(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
 			goto out;
 		}
 
@@ -229,7 +230,7 @@ struct net_mat_hdr_node *match_nl_get_hdr_graph(struct nl_sock *nsd,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
 			goto out;
 		}
 
@@ -268,7 +269,7 @@ struct net_mat_tbl_node *match_nl_get_tbl_graph(struct nl_sock *nsd,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
 			goto out;
 		}
 
@@ -302,7 +303,7 @@ int match_nl_set_del_rules(struct nl_sock *nsd, uint32_t pid,
 
 	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
 	if (!msg) {
-		fprintf(stderr, "Error: Allocation failure\n");
+		MAT_LOG(ERR, "Error: Allocation failure\n");
 		return -ENOMSG;
 	}
 
@@ -310,7 +311,7 @@ int match_nl_set_del_rules(struct nl_sock *nsd, uint32_t pid,
 			NET_MAT_IDENTIFIER_TYPE,
 			NET_MAT_IDENTIFIER_IFINDEX) ||
 	    nla_put_u32(msg->nlbuf, NET_MAT_IDENTIFIER, ifindex)) {
-		fprintf(stderr, "Error: Identifier put failed\n");
+		MAT_LOG(ERR, "Error: Identifier put failed\n");
 		match_nl_free_msg(msg);
 		return -EMSGSIZE;
 	}
@@ -346,7 +347,7 @@ int match_nl_set_del_rules(struct nl_sock *nsd, uint32_t pid,
 	nlh = msg->msg;
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse set rules msg\n");
+		MAT_LOG(ERR, "Warning unable to parse set rules msg\n");
 		match_nl_free_msg(msg);
 		return err;
 	}
@@ -358,7 +359,7 @@ int match_nl_set_del_rules(struct nl_sock *nsd, uint32_t pid,
 	}
 
 	if (tb[NET_MAT_RULES]) {
-		fprintf(stderr, "Failed to set:\n");
+		MAT_LOG(ERR, "Failed to set:\n");
 		match_get_rules(stdout, verbose, tb[NET_MAT_RULES], NULL);
 		match_nl_free_msg(msg);
 		return -EINVAL;
@@ -382,7 +383,7 @@ struct net_mat_rule *match_nl_get_rules(struct nl_sock *nsd, uint32_t pid,
 
 	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
 	if (!msg) {
-		fprintf(stderr, "Error: Allocation failure\n");
+		MAT_LOG(ERR, "Error: Allocation failure\n");
 		return NULL;
 	}
 
@@ -390,7 +391,7 @@ struct net_mat_rule *match_nl_get_rules(struct nl_sock *nsd, uint32_t pid,
                         NET_MAT_IDENTIFIER_TYPE,
                         NET_MAT_IDENTIFIER_IFINDEX) ||
 		nla_put_u32(msg->nlbuf, NET_MAT_IDENTIFIER, ifindex)) {
-		fprintf(stderr, "Error: Identifier put failed\n");
+		MAT_LOG(ERR, "Error: Identifier put failed\n");
 		goto out;
 	}
 
@@ -400,19 +401,19 @@ struct net_mat_rule *match_nl_get_rules(struct nl_sock *nsd, uint32_t pid,
 
 	rules = nla_nest_start(msg->nlbuf, NET_MAT_RULES);
 	if (!rules) {
-		fprintf(stderr, "Error: get_rules attributes failed\n");
+		MAT_LOG(ERR, "Error: get_rules attributes failed\n");
 		goto out;
 	}
 	err = nla_put_u32(msg->nlbuf, NET_MAT_TABLE_RULES_TABLE, tableid);
 	if (err) {
-		fprintf(stderr, "Error: invalid table\n");
+		MAT_LOG(ERR, "Error: invalid table\n");
 		goto out;
 	}
 	if (min > 0) {
 		err = nla_put_u32(msg->nlbuf, NET_MAT_TABLE_RULES_MINPRIO,
                                 min);
 		if (err) {
-			fprintf(stderr, "Error: invalid min parameter\n");
+			MAT_LOG(ERR, "Error: invalid min parameter\n");
 			goto out;
 		}
 	}
@@ -420,7 +421,7 @@ struct net_mat_rule *match_nl_get_rules(struct nl_sock *nsd, uint32_t pid,
 		err = nla_put_u32(msg->nlbuf, NET_MAT_TABLE_RULES_MAXPRIO,
                                 max);
 		if (err) {
-			fprintf(stderr, "Error: invalid min parameter\n");
+			MAT_LOG(ERR, "Error: invalid min parameter\n");
 			goto out;
 		}
 	}
@@ -439,7 +440,7 @@ struct net_mat_rule *match_nl_get_rules(struct nl_sock *nsd, uint32_t pid,
 		nlh = msg->msg;
 		err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get rules msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get rules msg\n");
 			goto out;
 		}
 
@@ -474,7 +475,7 @@ int match_nl_set_port(struct nl_sock *nsd, uint32_t pid,
 
 	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
 	if (!msg) {
-		fprintf(stderr, "Error: Allocation failure\n");
+		MAT_LOG(ERR, "Error: Allocation failure\n");
 		return -ENOMSG;
 	}
 
@@ -482,7 +483,7 @@ int match_nl_set_port(struct nl_sock *nsd, uint32_t pid,
 			NET_MAT_IDENTIFIER_TYPE,
 			NET_MAT_IDENTIFIER_IFINDEX) ||
 	    nla_put_u32(msg->nlbuf, NET_MAT_IDENTIFIER, ifindex)) {
-		fprintf(stderr, "Error: Identifier put failed\n");
+		MAT_LOG(ERR, "Error: Identifier put failed\n");
 		match_nl_free_msg(msg);
 		return -EMSGSIZE;
 	}
@@ -512,7 +513,7 @@ int match_nl_set_port(struct nl_sock *nsd, uint32_t pid,
 	nlh = msg->msg;
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse set port msg\n");
+		MAT_LOG(ERR, "Warning unable to parse set port msg\n");
 		match_nl_free_msg(msg);
 		return err;
 	}
@@ -524,7 +525,7 @@ int match_nl_set_port(struct nl_sock *nsd, uint32_t pid,
 	}
 
 	if (tb[NET_MAT_PORTS]) {
-		fprintf(stderr, "Failed to set:\n");
+		MAT_LOG(ERR, "Failed to set:\n");
 		match_get_ports(stdout, verbose, tb[NET_MAT_PORTS], NULL);
 		match_nl_free_msg(msg);
 		return -EINVAL;
@@ -547,7 +548,7 @@ struct net_mat_port *match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
 
 	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
 	if (!msg) {
-		fprintf(stderr, "Error: Allocation failure\n");
+		MAT_LOG(ERR, "Error: Allocation failure\n");
 		return NULL;
 	}
 
@@ -555,7 +556,7 @@ struct net_mat_port *match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
                         NET_MAT_IDENTIFIER_TYPE,
                         NET_MAT_IDENTIFIER_IFINDEX) ||
 		nla_put_u32(msg->nlbuf, NET_MAT_IDENTIFIER, ifindex)) {
-		fprintf(stderr, "Error: Identifier put failed\n");
+		MAT_LOG(ERR, "Error: Identifier put failed\n");
 		goto out;
 	}
 	err = match_put_rule_error(msg->nlbuf, NET_MAT_RULES_ERROR_CONT_LOG);
@@ -564,7 +565,7 @@ struct net_mat_port *match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
 
 	ports = nla_nest_start(msg->nlbuf, NET_MAT_PORTS);
 	if (!ports) {
-		fprintf(stderr, "Error: get_port attributes failed\n");
+		MAT_LOG(ERR, "Error: get_port attributes failed\n");
 		goto out;
 	}
 	if (min) {
@@ -594,7 +595,7 @@ struct net_mat_port *match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
 		nlh = msg->msg;
 		err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get rules msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get rules msg\n");
 			goto out;
 		}
 
@@ -628,7 +629,7 @@ int match_nl_create_update_destroy_table(struct nl_sock *nsd, uint32_t pid,
 
 	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
 	if (!msg) {
-		fprintf(stderr, "Error: Allocation failure\n");
+		MAT_LOG(ERR, "Error: Allocation failure\n");
 		return -ENOMSG;
 	}
 
@@ -636,7 +637,7 @@ int match_nl_create_update_destroy_table(struct nl_sock *nsd, uint32_t pid,
 			NET_MAT_IDENTIFIER_TYPE,
 			NET_MAT_IDENTIFIER_IFINDEX) ||
 	    nla_put_u32(msg->nlbuf, NET_MAT_IDENTIFIER, ifindex)) {
-		fprintf(stderr, "Error: Identifier put failed\n");
+		MAT_LOG(ERR, "Error: Identifier put failed\n");
 		match_nl_free_msg(msg);
 		return -EMSGSIZE;
 	}
@@ -666,7 +667,7 @@ int match_nl_create_update_destroy_table(struct nl_sock *nsd, uint32_t pid,
 	nlh = msg->msg;
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse create table msg\n");
+		MAT_LOG(ERR, "Warning unable to parse create table msg\n");
 		match_nl_free_msg(msg);
 		return err;
 	}
@@ -759,7 +760,7 @@ struct match_msg *match_nl_wrap_msg(struct nlmsghdr *buf)
 
 static void match_nl_handle_error(struct nlmsgerr *errmsg)
 {
-	fprintf(stderr, "Error processing request: %s\n",
+	MAT_LOG(ERR, "Error processing request: %s\n",
 		strerror(errmsg->error));
 }
 
@@ -789,7 +790,7 @@ struct match_msg *match_nl_recv_msg(struct nl_sock *nsd, int *err)
 
 	msg = match_nl_wrap_msg((struct nlmsghdr *)buf);
 	if (!msg) {
-		fprintf(stderr, "Error: Message is empty\n");
+		MAT_LOG(ERR, "Error: Message is empty\n");
 		free(buf);
 		return NULL;
 	}
@@ -816,7 +817,7 @@ struct match_msg *match_nl_recv_msg(struct nl_sock *nsd, int *err)
 	type = glm->cmd;
 
 	if (type < 0 || type > NET_MAT_CMD_MAX) {
-		fprintf(stderr, "Received message of unknown type %d\n", type);
+		MAT_LOG(ERR, "Received message of unknown type %d\n", type);
 		match_nl_free_msg(msg);
 		return NULL;
 	}
@@ -833,23 +834,23 @@ int match_nl_table_cmd_to_type(FILE *fp, bool print, int valid,
 	struct nl_sock *fd = NULL;
 
 	if (!tb[NET_MAT_IDENTIFIER_TYPE]) {
-		fprintf(stderr,
+		MAT_LOG(ERR,
 			"Warning: received rule msg without identifier type!\n");
 		return -EINVAL;
 	}
 	if (!tb[NET_MAT_IDENTIFIER]) {
-		fprintf(stderr,
+		MAT_LOG(ERR,
 			"Warning: received rule msg without identifier!\n");
 		return -EINVAL;
 	}
 
 	if (valid > 0 && !tb[valid]) {
-		fprintf(stderr, "Warning received cmd without valid attribute expected %i\n", valid);
+		MAT_LOG(ERR, "Warning received cmd without valid attribute expected %i\n", valid);
 		return -ENOMSG;
 	}
 
 	if (nla_len(tb[NET_MAT_IDENTIFIER_TYPE]) < (int)sizeof(type)) {
-		fprintf(stderr, "Warning invalid identifier type len\n");
+		MAT_LOG(ERR, "Warning invalid identifier type len\n");
 		return -EINVAL;
 	}
 
@@ -860,12 +861,12 @@ int match_nl_table_cmd_to_type(FILE *fp, bool print, int valid,
 		fd = nl_socket_alloc();
 		err = nl_connect(fd, NETLINK_ROUTE);
 		if (err < 0) {
-			fprintf(stderr,"Warning: Unable to connect socket\n");
+			MAT_LOG(ERR,"Warning: Unable to connect socket\n");
 			break;
 		}
 		err = rtnl_link_alloc_cache(fd, AF_UNSPEC, &link_cache);
 		if (err < 0) {
-			fprintf(stderr,"Warning: Unable to allocate cache\n");
+			MAT_LOG(ERR,"Warning: Unable to allocate cache\n");
 			break;
 		}
 		ifindex = nla_get_u32(tb[NET_MAT_IDENTIFIER]);
@@ -874,7 +875,7 @@ int match_nl_table_cmd_to_type(FILE *fp, bool print, int valid,
 			pfprintf(fp, print, "%s (%u):\n", iface, ifindex);
 		break;
 	default:
-		fprintf(stderr, "Warning unknown interface identifier type %i\n", type);
+		MAT_LOG(ERR, "Warning unknown interface identifier type %i\n", type);
 		break;
 	}
 
@@ -924,7 +925,7 @@ struct match_msg *match_nl_get_msg(struct nl_sock *nsd, uint8_t cmd, uint32_t pi
 
 	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
 	if (!msg) {
-		fprintf(stderr, "Error: Allocation failure\n");
+		MAT_LOG(ERR, "Error: Allocation failure\n");
 		return NULL;
 	}
 
@@ -960,7 +961,7 @@ int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 
 	msg = match_nl_alloc_msg(cmd, pid, NLM_F_REQUEST|NLM_F_ACK, 0, family);
 	if (!msg) {
-		fprintf(stderr, "Error: Allocation failure\n");
+		MAT_LOG(ERR, "Error: Allocation failure\n");
 		return -ENOMEM;
 	}
 
@@ -999,7 +1000,7 @@ int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			fprintf(stderr, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
 			match_nl_free_msg(msg);
 			return -EINVAL;
 		}

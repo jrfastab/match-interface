@@ -48,6 +48,7 @@
 
 #include <unistd.h>
 
+#include "matlog.h"
 #include "if_match.h"
 #include "matchlib.h"
 #ifdef DEBUG
@@ -111,7 +112,7 @@ static struct nl_msg *match_alloc_msg(struct nlmsghdr *nlh, uint8_t type, uint16
 		genl_connect(fd);
 		family = genl_ctrl_resolve(fd, NET_MAT_GENL_NAME);
 		if (family < 0) {
-			fprintf(stderr,
+			MAT_LOG(ERR,
 				"Can not resolve family NET_MAT_TABLE\n");
 			nl_close(fd);
 			nl_socket_free(fd);
@@ -269,7 +270,7 @@ static int match_cmd_get_tables(struct nlmsghdr *nlh)
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX,
 				match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		err = -EINVAL; /* TBD need to reply with ERROR */
 		goto nla_put_failure;
 	}
@@ -280,7 +281,7 @@ static int match_cmd_get_tables(struct nlmsghdr *nlh)
 		/* allocate storage for nlbuf node */
 		node = malloc(sizeof(*node));
 		if (!node) {
-			fprintf(stderr, "Error: Cannot allocate node\n");
+			MAT_LOG(ERR, "Error: Cannot allocate node\n");
 			free_multipart_msg(&head);
 			return -ENOMEM;
 		}
@@ -288,7 +289,7 @@ static int match_cmd_get_tables(struct nlmsghdr *nlh)
 		nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_TABLES,
 				NLM_F_REQUEST|NLM_F_ACK, 0);
 		if (!nlbuf) {
-			fprintf(stderr, "Error: Cannot allocate message\n");
+			MAT_LOG(ERR, "Error: Cannot allocate message\n");
 			/* special case: free the previously allocated node
 			 * since it has not yet been added to the tailq */
 			free(node);
@@ -307,14 +308,14 @@ static int match_cmd_get_tables(struct nlmsghdr *nlh)
 		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER_TYPE,
 				  NET_MAT_IDENTIFIER_IFINDEX);
 		if (err) {
-			fprintf(stderr, "Error: Cannot put identifier\n");
+			MAT_LOG(ERR, "Error: Cannot put identifier\n");
 			free_multipart_msg(&head);
 			goto nla_put_failure;
 		}
 
 		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER, ifindex);
 		if (err) {
-			fprintf(stderr, "Error: Cannot put ifindex\n");
+			MAT_LOG(ERR, "Error: Cannot put ifindex\n");
 			free_multipart_msg(&head);
 			return  -EMSGSIZE;
 		}
@@ -363,14 +364,14 @@ static int match_cmd_get_headers(struct nlmsghdr *nlh)
 	nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_HEADERS,
 				NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		err = -ENOMEM;
 		goto nla_put_failure;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		err = -EINVAL; /* TBD need to reply with ERROR */
 		goto nla_put_failure;
 	}
@@ -381,7 +382,7 @@ static int match_cmd_get_headers(struct nlmsghdr *nlh)
 
 	err = match_put_headers(nlbuf, backend->hdrs);
 	if (err) {
-		fprintf(stderr, "Warning failed to pack headers.\n");
+		MAT_LOG(ERR, "Warning failed to pack headers.\n");
 		goto nla_put_failure;
 	}
 	return nl_send_auto(nsd, nlbuf);
@@ -402,14 +403,14 @@ static int match_cmd_get_actions(struct nlmsghdr *nlh)
 	nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_ACTIONS,
 				NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		err = -ENOMEM;
 		goto nla_put_failure;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		err = -EINVAL; /* TBD need to reply with ERROR */
 		goto nla_put_failure;
 	}
@@ -450,14 +451,14 @@ static int match_cmd_get_header_graph(struct nlmsghdr *nlh)
 	nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_HDR_GRAPH,
 		NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		err = -ENOMEM;
 		goto nla_put_failure;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		err = -EINVAL; /* TBD need to reply with ERROR */
 		goto nla_put_failure;
 	}
@@ -485,14 +486,14 @@ static int match_cmd_get_table_graph(struct nlmsghdr *nlh)
 
 	nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_TABLE_GRAPH, NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		err = -ENOMEM;
 		goto nla_put_failure;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		err = -EINVAL; /* TBD need to reply with ERROR */
 		goto nla_put_failure;
 	}
@@ -535,14 +536,14 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Error: Cannot parse get rules request\n");
+		MAT_LOG(ERR, "Error: Cannot parse get rules request\n");
 		return -EINVAL;
 	}
 
 	err = nla_parse_nested(tb, NET_MAT_MAX,
 			       tb[NET_MAT_RULES], match_table_rules_policy);
 	if (err) {
-		fprintf(stderr, "Error: Cannot parse get rules request\n");
+		MAT_LOG(ERR, "Error: Cannot parse get rules request\n");
 		return -EINVAL;
 	}
 
@@ -550,7 +551,7 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 	if (tb[NET_MAT_TABLE_RULES_TABLE]) {
 		table = nla_get_u32(tb[NET_MAT_TABLE_RULES_TABLE]);
 	} else {
-		fprintf(stderr, "Error: Table id is required\n");
+		MAT_LOG(ERR, "Error: Table id is required\n");
 		return -EINVAL;
 	}
 
@@ -565,12 +566,12 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 
 #ifdef MATCHD_MOCK_SUPPORT
 	if (table > MAX_MOCK_TABLES - 1 || table < 1) {
-		fprintf(stderr, "Error: Table id is out of range\n");
+		MAT_LOG(ERR, "Error: Table id is out of range\n");
 		return -ERANGE;
 	}
 
 	if (!matchd_mock_tables[table] || !my_dyn_table_list[table].uid) {
-		fprintf(stderr, "Error: Table does not exist\n");
+		MAT_LOG(ERR, "Error: Table does not exist\n");
 		return -ENOENT;
 	}
 
@@ -578,7 +579,7 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 		max = my_dyn_table_list[table].size;
 
 	if (max > my_dyn_table_list[table].size || min > max) {
-		fprintf(stderr, "Error: rule id min/max is out of range\n");
+		MAT_LOG(ERR, "Error: rule id min/max is out of range\n");
 		return -ERANGE;
 	}
 #endif
@@ -589,7 +590,7 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 		/* allocate storage for nlbuf node */
 		node = malloc(sizeof(*node));
 		if (!node) {
-			fprintf(stderr, "Error: Cannot allocate node\n");
+			MAT_LOG(ERR, "Error: Cannot allocate node\n");
 			free_multipart_msg(&head);
 			return -ENOMEM;
 		}
@@ -597,7 +598,7 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 		nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_GET_RULES,
 				NLM_F_REQUEST|NLM_F_ACK, 0);
 		if (!nlbuf) {
-			fprintf(stderr, "Error: Cannot allocate message\n");
+			MAT_LOG(ERR, "Error: Cannot allocate message\n");
 			/* special case: free the previously allocated node
 			 * since it has not yet been added to the tailq */
 			free(node);
@@ -619,14 +620,14 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER_TYPE,
 			    NET_MAT_IDENTIFIER_IFINDEX);
 		if (err) {
-			fprintf(stderr, "Error: Cannot put identifier\n");
+			MAT_LOG(ERR, "Error: Cannot put identifier\n");
 			free_multipart_msg(&head);
 			return -EMSGSIZE;
 		}
 
 		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER, ifindex);
 		if (err) {
-			fprintf(stderr, "Error: Cannot put ifindex\n");
+			MAT_LOG(ERR, "Error: Cannot put ifindex\n");
 			free_multipart_msg(&head);
 			return -EMSGSIZE;
 		}
@@ -636,14 +637,14 @@ static int match_cmd_get_rules(struct nlmsghdr *nlh)
 		 * here, so treat it as a real error. */
 		nest = nla_nest_start(nlbuf, NET_MAT_RULES);
 		if (!nest) {
-			fprintf(stderr, "Error: Cannot put rules\n");
+			MAT_LOG(ERR, "Error: Cannot put rules\n");
 			free_multipart_msg(&head);
 			return -EMSGSIZE;
 		}
 
 #ifdef DEBUG
 		switch_debug(1);
-		printf("get_rules: table  %d\n", table);
+		MAT_LOG(DEBUG, "get_rules: table  %d\n", table);
 #endif /* DEBUG */
 
 		rules = matchd_mock_tables[table];
@@ -849,21 +850,21 @@ static int match_cmd_resolve_rules(struct net_mat_rule *rule, int cmd,
 		struct net_mat_rule *rules;
 
 		if (!matchd_mock_tables[table]) {
-			fprintf(stderr, "Warning, invalid rule table %i\n",
+			MAT_LOG(ERR, "Warning, invalid rule table %i\n",
 				table);
 			err = -EINVAL;
 			goto skip_add;
 		}
 
 		if (!my_dyn_table_list[table].uid) {
-			fprintf(stderr, "Warning, invalid dynamic table %i\n",
+			MAT_LOG(ERR, "Warning, invalid dynamic table %i\n",
 				table);
 			err = -EINVAL;
 			goto skip_add;
 		}
 
 		if (rule[i].uid > my_dyn_table_list[table].size) {
-			fprintf(stderr, "Warning, table overrun\n");
+			MAT_LOG(ERR, "Warning, table overrun\n");
 			err = -ENOMEM;
 			goto skip_add;
 		}
@@ -873,7 +874,7 @@ static int match_cmd_resolve_rules(struct net_mat_rule *rule, int cmd,
 		switch (cmd) {
 		case NET_MAT_TABLE_CMD_SET_RULES:
 			if (rules[rule[i].uid].uid) {
-				fprintf(stderr, "rule %d already exists\n",
+				MAT_LOG(ERR, "rule %d already exists\n",
 					rule[i].uid);
 				err = -EEXIST;
 				goto skip_add;
@@ -881,7 +882,7 @@ static int match_cmd_resolve_rules(struct net_mat_rule *rule, int cmd,
 
 			err = match_is_valid_rule(get_tables(table), rule);
 			if (err) {
-				fprintf(stderr, "Warning, rule invalid\n");
+				MAT_LOG(ERR, "Warning, rule invalid\n");
 				goto skip_add;
 			}
 
@@ -950,14 +951,14 @@ static int match_cmd_rules(struct nlmsghdr *nlh)
 	nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_SET_RULES,
 				NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		err = -ENOMEM;
 		goto nla_put_failure;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		err = -EINVAL; /* TBD need to reply with ERROR */
 		goto nla_put_failure;
 	}
@@ -972,19 +973,19 @@ static int match_cmd_rules(struct nlmsghdr *nlh)
 	/* Generates a null terminated list of rules for processing */
 	err = match_get_rules(stdout, true, tb[NET_MAT_RULES], &rule);
 	if (err) {
-		fprintf(stderr, "Warning received an invalid set_rule oper\n");
+		MAT_LOG(ERR, "Warning received an invalid set_rule oper\n");
 		goto nla_put_failure;
 	} 
 
 	err = match_cmd_resolve_rules(rule, glh->cmd, error_method, nlbuf);
 	if (err && (error_method < NET_MAT_RULES_ERROR_CONTINUE + 1)) {
-		fprintf(stderr, "%s: return err %i\n", __func__, err);
+		MAT_LOG(ERR, "%s: return err %i\n", __func__, err);
 		goto nla_put_failure;
 	}
 
 	err = nl_send_auto(nsd, nlbuf);
 	if (err < 0) {
-		fprintf(stderr, "%s: nl_send_suto returned err %d\n",
+		MAT_LOG(ERR, "%s: nl_send_suto returned err %d\n",
 			__func__, err);
 		goto nla_put_failure;
 	}
@@ -1155,14 +1156,14 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 	nlbuf = match_alloc_msg(nlh, NET_MAT_TABLE_CMD_CREATE_TABLE,
 			       NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		err = -ENOMEM;
 		goto nla_put_failure;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		err = -EINVAL; /* TBD need to reply with ERROR */
 		goto nla_put_failure;
 	}
@@ -1202,7 +1203,7 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 			}
 			pp_table(stdout, true, &tables[i]);
 
-			fprintf(stdout, "%s: destroy table %d\n",
+			MAT_LOG(ERR, "%s: destroy table %d\n",
 					__func__, tables[i].uid);
 
 #ifdef MATCHD_MOCK_SUPPORT
@@ -1218,7 +1219,7 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 
 			err = (backend->destroy_table)(&tables[i]);
 			if(err < 0) {
-				printf("delete table %d error %d\n", i, err);
+				MAT_LOG(ERR, "delete table %d error %d\n", i, err);
 				goto nla_put_failure;
 			}
 
@@ -1238,21 +1239,21 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 			pp_table(stdout, true, &tables[i]);
 
 			if (tables[i].uid > MAX_MOCK_TABLES - 1) {
-				fprintf(stderr, "create table request greater "
+				MAT_LOG(ERR, "create table request greater "
 						"than max tables abort!\n");
 				err =  -EINVAL;
 				goto nla_put_failure;
 			}
 
 			if (matchd_mock_tables[tables[i].uid]) {
-				fprintf(stderr, "create table request exists "
+				MAT_LOG(ERR, "create table request exists "
 					"in mock tables abort!\n");
 				err = -EEXIST;
 				goto nla_put_failure;
 			}
 
 			if (my_dyn_table_list[tables[i].uid].uid) {
-				fprintf(stderr, "create table request exists "
+				MAT_LOG(ERR, "create table request exists "
 					"in dyn tables abort!\n");
 				err = -EEXIST;
 				goto nla_put_failure;
@@ -1260,26 +1261,26 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 #endif /* MATCHD_MOCK_SUPPORT */
 
 			if (match_is_dynamic_table(tables[i].source) == false) {
-				fprintf(stderr, "create table requests require"
+				MAT_LOG(ERR, "create table requests require"
 						" dynamic bit\n");
 				err = -EINVAL;
 				goto nla_put_failure;
 			}
 
 			if (src->size < tables[i].size) {
-				fprintf(stderr, "Dynamic table's size must be less than or equal to source table's size\n");
+				MAT_LOG(ERR, "Dynamic table's size must be less than or equal to source table's size\n");
 				err = -EINVAL;
 				goto nla_put_failure;
 			}
 
 			if (match_set_dyn_tbl_matches(src, &tables[i])) {
-				fprintf(stderr, "Dynamic table's matches must be a subset of the source table's matches\n");
+				MAT_LOG(ERR, "Dynamic table's matches must be a subset of the source table's matches\n");
 				err = -EINVAL;
 				goto nla_put_failure;
 			}
 
 			if (match_set_dyn_tbl_actions(src, &tables[i])) {
-				fprintf(stderr, "Dynamic table's actions must be a subset of the source table's actions\n");
+				MAT_LOG(ERR, "Dynamic table's actions must be a subset of the source table's actions\n");
 				err = -EINVAL;
 				goto nla_put_failure;
 			}
@@ -1291,7 +1292,7 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 			matchd_mock_tables[tables[i].uid] = calloc(1 +
 				tables[i].size, sizeof(struct net_mat_rule));
 			if (!matchd_mock_tables[tables[i].uid]) {
-				fprintf(stderr, "rule table alloc failed!\n");
+				MAT_LOG(ERR, "rule table alloc failed!\n");
 				err = -ENOMEM;
 				goto nla_put_failure;
 			}
@@ -1299,7 +1300,7 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 
 			err = (backend->create_table)(&tables[i]);
 			if(err < 0) {
-				fprintf(stderr, "create table failed err=%d\n", err);
+				MAT_LOG(ERR, "create table failed err=%d\n", err);
 				free(matchd_mock_tables[tables[i].uid]);
 				matchd_mock_tables[tables[i].uid] = NULL;
 				goto nla_put_failure;
@@ -1312,12 +1313,12 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 		case NET_MAT_TABLE_CMD_UPDATE_TABLE:
 			err = (backend->update_table)(&tables[i]);
 			if (err < 0) {
-				fprintf(stderr, "update table failed err=%d\n", err);
+				MAT_LOG(ERR, "update table failed err=%d\n", err);
 				goto nla_put_failure;
 			}
 			break;
 		default:
-			fprintf(stdout, "table cmd error\n");
+			MAT_LOG(ERR, "table cmd error\n");
 			break;
 		}
 	}
@@ -1330,7 +1331,7 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 	err = nl_send_auto(nsd, nlbuf);
 
 	if (err < 0) {
-		fprintf(stderr, "nl_send_auto returned error %d\n", err);
+		MAT_LOG(ERR, "nl_send_auto returned error %d\n", err);
 		goto nla_put_failure;
 	}
 
@@ -1366,13 +1367,13 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 	int err = -ENOMSG;
 
 	if (!backend->get_ports) {
-		fprintf(stderr, "get_ports not supported by backend.\n");
+		MAT_LOG(ERR, "get_ports not supported by backend.\n");
 		return -EOPNOTSUPP;
 	}
 
 	err = backend->get_ports(&ports);
 	if (err) {
-		fprintf(stderr, "get_ports failed in backend.\n");
+		MAT_LOG(ERR, "get_ports failed in backend.\n");
 		return -EOPNOTSUPP;
 	}
 
@@ -1382,7 +1383,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		return -EINVAL;
 	}
 
@@ -1394,7 +1395,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 				       tb[NET_MAT_PORTS],
 				       match_table_ports_policy);
 		if (err) {
-			fprintf(stderr, "Error: Cannot parse get ports request\n");
+			MAT_LOG(ERR, "Error: Cannot parse get ports request\n");
 			return -EINVAL;
 		}
 
@@ -1411,7 +1412,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 		/* allocate storage for nlbuf node */
 		node = malloc(sizeof(*node));
 		if (!node) {
-			fprintf(stderr, "Error: Cannot allocate node\n");
+			MAT_LOG(ERR, "Error: Cannot allocate node\n");
 			err = -ENOMEM;
 			goto nla_failure;
 		}
@@ -1419,7 +1420,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 		nlbuf = match_alloc_msg(nlh, NET_MAT_PORT_CMD_GET_PORTS,
 					NLM_F_REQUEST|NLM_F_ACK, 0);
 		if (!nlbuf) {
-			fprintf(stderr, "Message allocation failed.\n");
+			MAT_LOG(ERR, "Message allocation failed.\n");
 			err = -ENOMEM;
 			goto nla_failure;
 		}
@@ -1434,20 +1435,20 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 
 		err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 		if (err) {
-			fprintf(stderr, "Warnings genlmsg_parse failed\n");
+			MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 			goto nla_failure;
 		}
 
 		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER_TYPE,
 				  NET_MAT_IDENTIFIER_IFINDEX);
 		if (err) {
-			fprintf(stderr, "Error: Cannot put identifier\n");
+			MAT_LOG(ERR, "Error: Cannot put identifier\n");
 			goto nla_failure;
 		}
 
 		err = nla_put_u32(nlbuf, NET_MAT_IDENTIFIER, ifindex);
 		if (err) {
-			fprintf(stderr, "Error: Cannot put identifier\n");
+			MAT_LOG(ERR, "Error: Cannot put identifier\n");
 			goto nla_failure;
 		}
 
@@ -1501,7 +1502,7 @@ static int match_cmd_set_ports(struct nlmsghdr *nlh)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Warnings genlmsg_parse failed\n");
+		MAT_LOG(ERR, "Warnings genlmsg_parse failed\n");
 		return -EINVAL;
 	}
 
@@ -1510,19 +1511,19 @@ static int match_cmd_set_ports(struct nlmsghdr *nlh)
 
 	err = match_get_ports(stderr, true, tb[NET_MAT_PORTS], &p);
 	if (err) {
-		fprintf(stderr, "get_ports failed.\n");
+		MAT_LOG(ERR, "get_ports failed.\n");
 		return err;
 	}
 
 	if (!backend->set_ports) {
-		fprintf(stderr, "set_ports not supported by backend.\n");
+		MAT_LOG(ERR, "set_ports not supported by backend.\n");
 		free(p);
 		return -EOPNOTSUPP;
 	}
 
 	err = backend->set_ports(p);
 	if (err) {
-		fprintf(stderr, "set_ports failed in backend.\n");
+		MAT_LOG(ERR, "set_ports failed in backend.\n");
 		free(p);
 		return err;
 	}
@@ -1531,7 +1532,7 @@ static int match_cmd_set_ports(struct nlmsghdr *nlh)
 				NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
 		err = -ENOMEM;
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		goto nla_put_failure;
 	}
 
@@ -1558,18 +1559,18 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 	unsigned int count = 0;
 
 	if (!backend->get_lport) {
-		fprintf(stderr, "get_lport not supported by backend.\n");
+		MAT_LOG(ERR, "get_lport not supported by backend.\n");
 		return -EOPNOTSUPP;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		fprintf(stderr, "Error: Cannot parse get lport request\n");
+		MAT_LOG(ERR, "Error: Cannot parse get lport request\n");
 		return -EINVAL;
 	}
 
 	if (!tb[NET_MAT_PORTS]) {
-		fprintf(stderr, "Error: Missing lport port request\n");
+		MAT_LOG(ERR, "Error: Missing lport port request\n");
 		return -EINVAL;
 	}
 
@@ -1589,13 +1590,13 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 	     i = nla_next(i, &rem), count++) {
 
 		if (nla_type(i) != NET_MAT_PORT) {
-			printf("Warning: not a port!\n");
+			MAT_LOG(ERR, "Warning: not a port!\n");
 			continue;
 		}
 
 		err = match_get_port(stdout, true, i, &ports[count]);
 		if (err) {
-			fprintf(stderr, "Error: invalid port message\n");
+			MAT_LOG(ERR, "Error: invalid port message\n");
 			free(ports);
 			return -EINVAL;
 		}
@@ -1603,7 +1604,7 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 		err = backend->get_lport(&ports[count].pci,
 					 &ports[count].port_id);
 		if (err) {
-			fprintf(stderr, "get_lports failed in backend.\n");
+			MAT_LOG(ERR, "get_lports failed in backend.\n");
 			free(ports);
 			return err;
 		}
@@ -1612,7 +1613,7 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 	nlbuf = match_alloc_msg(nlh, NET_MAT_PORT_CMD_GET_LPORT,
 				NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
-		fprintf(stderr, "Message allocation failed.\n");
+		MAT_LOG(ERR, "Message allocation failed.\n");
 		goto nla_put_failure;
 	}
 
@@ -1622,7 +1623,7 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 
 	err = match_put_ports(nlbuf, ports);
 	if (err) {
-		fprintf(stderr, "Warning failed to pack headers.\n");
+		MAT_LOG(ERR, "Warning failed to pack headers.\n");
 		goto nla_put_failure;
 	}
 	err = nl_send_auto(nsd, nlbuf);
@@ -1743,7 +1744,7 @@ int matchd_init(struct nl_sock *sock, int family_id,
 
 	backend = match_backend_open(backend_name, init_arg);
 	if (!backend) {
-		fprintf(stderr, "Error: cannot open backend\n");
+		MAT_LOG(ERR, "Error: cannot open backend\n");
 		return -EINVAL;
 	}
 

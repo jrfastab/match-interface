@@ -55,6 +55,7 @@
 
 #include "if_match.h"
 #include "matchlib.h"
+#include "matlog.h"
 
 #define MAX_TABLES 200
 #define MAX_HDRS 200
@@ -239,7 +240,7 @@ unsigned int find_field(char *field, unsigned int hdr)
 	header = get_headers(hdr);
 
 	if (!header) {
-		fprintf(stderr, "invalid header\n");
+		MAT_LOG(ERR, "invalid header\n");
 		return 0;
 	}
 	for (i = 0; i < header->field_sz; i++) {
@@ -515,7 +516,7 @@ static void pp_field_ref(FILE *fp, int print, struct net_mat_field_ref *ref,
 	}
 
 	if(!headers_names(hi) || !fields_names(hi, fi)) {
-		fprintf(stderr,"Invalid header or field\n");
+		MAT_LOG(ERR,"Invalid header or field\n");
 		return;
 	}
 	switch (ref->type) {
@@ -698,7 +699,7 @@ void pp_table(FILE *fp, int print, struct net_mat_tbl *table)
 			struct net_mat_action *act = actions[table->actions[i]];
 
 			if (!act) {
-				fprintf(stderr, "unknown action uid %i\n",
+				MAT_LOG(ERR, "unknown action uid %i\n",
 					table->actions[i]);
 				continue;
 			}
@@ -827,7 +828,7 @@ static int match_compar_graph_nodes(const void *a, const void *b)
 	t_b = get_tables(g_b->uid);
 
 	if (!t_a || !t_b) {
-		fprintf(stderr, "Error: no tables to compare\n");
+		MAT_LOG(ERR, "Error: no tables to compare\n");
 		return -1;
 	}
 	if (t_a->source < t_b->source)
@@ -873,7 +874,7 @@ void pp_table_graph(FILE *fp, int print, struct net_mat_tbl_node *nodes)
 		struct net_mat_tbl *t = get_tables(nodes[i].uid);
 
 		if(!t) {
-			fprintf(stderr, "Error: table doesn't exist\n");
+			MAT_LOG(ERR, "Error: table doesn't exist\n");
 			return;
 		}
 		if (src != t->source) {
@@ -919,7 +920,7 @@ void ppg_table_graph(FILE *fp, struct net_mat_tbl_node *nodes)
 		struct net_mat_tbl *t = get_tables(nodes[i].uid);
 		Agnode_t *n;
 		if(!t) {
-			fprintf(stderr, "Error: table doesn't exist\n");
+			MAT_LOG(ERR, "Error: table doesn't exist\n");
 			return;
 		}
 
@@ -1115,7 +1116,7 @@ match_get_action_arg(struct net_mat_action_arg *arg, struct nlattr *nl)
 	err = nla_parse_nested(tb, NET_MAT_ACTION_ARG_MAX, nl,
 			       net_mat_action_arg_policy);
 	if (err) {
-		fprintf(stderr, "Warning, parse error parsing actions %i\n", err);
+		MAT_LOG(ERR, "Warning, parse error parsing actions %i\n", err);
 		return -EINVAL;
 	}
 
@@ -1191,7 +1192,7 @@ int match_get_action(FILE *fp, int print, struct nlattr *nl,
 	err = nla_parse_nested(action, NET_MAT_ACTION_ATTR_MAX, nl,
 			       net_mat_action_policy);
 	if (err) {
-		fprintf(stderr, "Warning, parse error parsing actions %i\n", err);
+		MAT_LOG(ERR, "Warning, parse error parsing actions %i\n", err);
 		err = -EINVAL;
 		goto out;
 	}
@@ -1336,7 +1337,7 @@ match_get_named_value(struct net_mat_named_value *v, struct nlattr *nl)
 	err = nla_parse_nested(tb, NET_MAT_TABLE_ATTR_VALUE_T_MAX, nl,
 			       net_mat_named_value_policy);
 	if (err) {
-		fprintf(stderr, "Warning, parse error parsing actions %i\n", err);
+		MAT_LOG(ERR, "Warning, parse error parsing actions %i\n", err);
 		return -EINVAL;
 	}
 
@@ -1423,14 +1424,14 @@ int match_get_table(FILE *fp, int print, struct nlattr *nl,
 	err = nla_parse_nested(table, NET_MAT_TABLE_ATTR_MAX, nl,
 			       net_mat_table_policy);
 	if (err) {
-		fprintf(stderr, "Warning parse error rule attribs, abort parse\n");
+		MAT_LOG(ERR, "Warning parse error rule attribs, abort parse\n");
 		return err;
 	}
 
 	name = table[NET_MAT_TABLE_ATTR_NAME] ? nla_get_string(table[NET_MAT_TABLE_ATTR_NAME]) : none,
 	uid = table[NET_MAT_TABLE_ATTR_UID] ? nla_get_u32(table[NET_MAT_TABLE_ATTR_UID]) : 0;
 	if (uid > MAX_TABLES - 1) {
-		fprintf(stderr, "Error: table id out of range (max=%d)\n",
+		MAT_LOG(ERR, "Error: table id out of range (max=%d)\n",
 			MAX_TABLES - 1);
 		return -ERANGE;
 	}
@@ -1567,7 +1568,7 @@ int match_get_rules(FILE *fp, int print, struct nlattr *attr,
 		err = nla_parse_nested(rule, NET_MAT_ATTR_MAX, i,
 				       match_table_rule_policy);
 		if (err) {
-			fprintf(stderr, "Warning: get_rule parse error skipping input.\n");
+			MAT_LOG(ERR, "Warning: get_rule parse error skipping input.\n");
 			continue;
 		}
 
@@ -1591,7 +1592,7 @@ int match_get_rules(FILE *fp, int print, struct nlattr *attr,
 					       rule[NET_MAT_ATTR_MATCHES],
 					       &matches);
 			if (err) {
-				fprintf(stderr, "Warning get_rule matches parse error skipping input.\n");
+				MAT_LOG(ERR, "Warning get_rule matches parse error skipping input.\n");
 				continue;
 			}
 		}
@@ -1601,7 +1602,7 @@ int match_get_rules(FILE *fp, int print, struct nlattr *attr,
 					       rule[NET_MAT_ATTR_ACTIONS],
 					       &actions);
 			if (err) {
-				fprintf(stderr, "Warning get_rule actions parse error skipping input.\n");
+				MAT_LOG(ERR, "Warning get_rule actions parse error skipping input.\n");
 				continue;
 			}
 		}
@@ -1644,7 +1645,7 @@ match_get_table_field(FILE *fp __unused, int print __unused, struct nlattr *nl,
 
 	hdr->fields = calloc(count + 1, sizeof(struct net_mat_hdr));
 	if (!hdr->fields) {
-		fprintf(stderr, "%s: Unable to allocate memory\n", __func__);
+		MAT_LOG(ERR, "%s: Unable to allocate memory\n", __func__);
 		err = -ENOMEM;
 		goto out;
 	}
@@ -1662,7 +1663,7 @@ match_get_table_field(FILE *fp __unused, int print __unused, struct nlattr *nl,
 		err = nla_parse_nested(field, NET_MAT_FIELD_ATTR_MAX, i,
 				       match_get_field_policy);
 		if (err) {
-			fprintf(stderr, "Warning field parse error\n");
+			MAT_LOG(ERR, "Warning field parse error\n");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1700,7 +1701,7 @@ int match_get_headers(FILE *fp, int print, struct nlattr *nl,
 
 	h = calloc(count + 1, sizeof(struct net_mat_hdr));
 	if (!h) {
-		fprintf(stderr, "Unable to allocate memory\n");
+		MAT_LOG(ERR, "Unable to allocate memory\n");
 		err = -ENOMEM;
 		goto out;
 	}
@@ -1715,14 +1716,14 @@ int match_get_headers(FILE *fp, int print, struct nlattr *nl,
 		err = nla_parse_nested(hdr, NET_MAT_HEADER_ATTR_MAX, i,
 				       match_get_header_policy);
 		if (err) {
-			fprintf(stderr, "Warning header parse error. aborting.\n");
+			MAT_LOG(ERR, "Warning header parse error. aborting.\n");
 			err = -EINVAL;
 			goto out;
 		}
 
 		header = calloc(1, sizeof(struct net_mat_hdr));
 		if (!header) {
-			fprintf(stderr, "Warning OOM in header parser. aborting.\n");
+			MAT_LOG(ERR, "Warning OOM in header parser. aborting.\n");
 			err = -ENOMEM;
 			goto out;
 		}
@@ -1841,7 +1842,7 @@ int match_get_hdrs_graph(FILE *fp, int print, struct nlattr *nl,
 
 	nodes = calloc(j + 1, sizeof(struct net_mat_hdr_node));
 	if (!nodes) {
-		fprintf(stderr, "%s: Unable to allocate memory\n", __func__);
+		MAT_LOG(ERR, "%s: Unable to allocate memory\n", __func__);
 		err = -ENOMEM;
 		goto out;
 	}
@@ -1853,7 +1854,7 @@ int match_get_hdrs_graph(FILE *fp, int print, struct nlattr *nl,
 		err = nla_parse_nested(node, NET_MAT_HEADER_NODE_MAX, i,
 				       match_get_hdr_node_policy);
 		if (err) {
-			fprintf(stderr, "Warning header graph node parse error. aborting.\n");
+			MAT_LOG(ERR, "Warning header graph node parse error. aborting.\n");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1870,7 +1871,7 @@ int match_get_hdrs_graph(FILE *fp, int print, struct nlattr *nl,
 		}
 
 		if (!node[NET_MAT_HEADER_NODE_UID]) {
-			fprintf(stderr, "Warning, missing header node uid attr %i\n", j);
+			MAT_LOG(ERR, "Warning, missing header node uid attr %i\n", j);
 			err = -EINVAL;
 			goto out;
 		}
@@ -1884,7 +1885,7 @@ int match_get_hdrs_graph(FILE *fp, int print, struct nlattr *nl,
 		err = match_get_header_refs(node[NET_MAT_HEADER_NODE_HDRS],
 					   &nodes[j].hdrs);
 		if (err) {
-			fprintf(stderr, "Warning header refs parse error. aborting.\n");
+			MAT_LOG(ERR, "Warning header refs parse error. aborting.\n");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1896,7 +1897,7 @@ int match_get_hdrs_graph(FILE *fp, int print, struct nlattr *nl,
 					  node[NET_MAT_HEADER_NODE_JUMP],
 					  &nodes[j].jump);
 		if (err) {
-			fprintf(stderr, "Warning header graph jump parse error. aborting.\n");
+			MAT_LOG(ERR, "Warning header graph jump parse error. aborting.\n");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1932,7 +1933,7 @@ int match_get_tbl_graph(FILE *fp, int print, struct nlattr *nl,
 
 	nodes = calloc(j + 1, sizeof(struct net_mat_tbl_node));
 	if (!nodes) {
-		fprintf(stderr, "%s: Unable to allocate memory\n", __func__);
+		MAT_LOG(ERR, "%s: Unable to allocate memory\n", __func__);
 		err = -ENOMEM;
 		goto out;
 	}
@@ -1945,13 +1946,13 @@ int match_get_tbl_graph(FILE *fp, int print, struct nlattr *nl,
 		err = nla_parse_nested(node, NET_MAT_TABLE_GRAPH_NODE_MAX, i,
 				       match_get_node_policy);
 		if (err) {
-			fprintf(stderr, "Warning table graph node parse error. aborting.\n");
+			MAT_LOG(ERR, "Warning table graph node parse error. aborting.\n");
 			err = -EINVAL;
 			goto out;
 		}
 
 		if (!node[NET_MAT_TABLE_GRAPH_NODE_UID]) {
-			fprintf(stderr, "Warning, missing graph node uid\n");
+			MAT_LOG(ERR, "Warning, missing graph node uid\n");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1968,7 +1969,7 @@ int match_get_tbl_graph(FILE *fp, int print, struct nlattr *nl,
 					  node[NET_MAT_TABLE_GRAPH_NODE_JUMP],
 					  &n->jump);
 		if (err) {
-			fprintf(stderr, "Warning table graph jump parse error. aborting.\n");
+			MAT_LOG(ERR, "Warning table graph jump parse error. aborting.\n");
 			err = -EINVAL;
 			goto out;
 		}
@@ -1997,7 +1998,7 @@ static int match_get_port_stats(FILE *fp __unused, int print __unused,
 
 	err = nla_parse_nested(p, NET_MAT_PORT_T_STATS_MAX, nlattr, net_mat_port_stats_policy);
 	if (err) {
-		fprintf(stderr, "Warning parse error on port stats, abort parse\n");
+		MAT_LOG(ERR, "Warning parse error on port stats, abort parse\n");
 		return err;
 	}
 
@@ -2008,7 +2009,7 @@ static int match_get_port_stats(FILE *fp __unused, int print __unused,
 				       p[NET_MAT_PORT_T_STATS_RX],
 				       net_mat_port_stats_rxtx_policy);
 		if (err) {
-			fprintf(stderr, "Warning parse error on port rx stats, abort parse\n");
+			MAT_LOG(ERR, "Warning parse error on port rx stats, abort parse\n");
 			return err;
 		}
 
@@ -2025,7 +2026,7 @@ static int match_get_port_stats(FILE *fp __unused, int print __unused,
 				       p[NET_MAT_PORT_T_STATS_TX],
 				       net_mat_port_stats_rxtx_policy);
 		if (err) {
-			fprintf(stderr, "Warning parse error on port tx stats, abort parse\n");
+			MAT_LOG(ERR, "Warning parse error on port tx stats, abort parse\n");
 			return err;
 		}
 
@@ -2046,7 +2047,7 @@ int match_get_port(FILE *fp, int print, struct nlattr *nlattr,
 
 	err = nla_parse_nested(p, NET_MAT_PORT_T_MAX, nlattr, net_mat_port_policy);
 	if (err) {
-		fprintf(stderr, "Warning parse error rule attribs, abort parse\n");
+		MAT_LOG(ERR, "Warning parse error rule attribs, abort parse\n");
 		return err;
 	}
 
@@ -2420,7 +2421,7 @@ int match_put_rules(struct nl_msg *nlbuf, struct net_mat_rule *ref)
 	for (i = 0; ref[i].uid; i++) {
 		err = match_put_rule(nlbuf, &ref[i]);
 		if (err) {
-			fprintf(stderr, "Warning put rule error aborting\n");
+			MAT_LOG(ERR, "Warning put rule error aborting\n");
 			return err;
 		}
 	}

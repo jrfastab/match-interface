@@ -36,6 +36,7 @@
 #include "backend.h"
 #include "matchlib.h"
 #include "if_match.h"
+#include "matlog.h"
 
 /**
  * @internal
@@ -81,7 +82,7 @@ void match_backend_list_all(void)
 	void *cookie = NULL;
 
 	while ((name = match_backend_get_next(&cookie)))
-		fprintf(stdout, "%s\n", name);
+		MAT_LOG(ERR, "%s\n", name);
 }
 
 static bool backend_is_sane(struct match_backend *be)

@@ -54,18 +54,20 @@
 #include "ieslib.h" /* ies interface */
 #include "matchd_lib.h"
 #include "backend.h"
+#include "matlog.h"
 
 #define DEFAULT_BACKEND_NAME "ies_pipeline"
 
 static void matchd_usage(void)
 {
-	fprintf(stdout, "matchd [-b backend] [-f family_id] [-h] [-l] [-s]\n");
-	fprintf(stdout, "Options:\n");
-	fprintf(stdout, "  -b backend    name of backend to load (default: %s)\n", DEFAULT_BACKEND_NAME);
-	fprintf(stdout, "  -f family_id  netlink family id\n");
-	fprintf(stdout, "  -h            display this help and exit\n");
-	fprintf(stdout, "  -l            list available backends and exit\n");
-	fprintf(stdout, "  -s            add all ports to default vlan (ies_pipeline only)\n");
+	MAT_LOG(ERR, "matchd [-b backend] [-f family_id] [-h] [-l] [-s]\n");
+	MAT_LOG(ERR, "Options:\n");
+	MAT_LOG(ERR, "  -b backend    name of backend to load (default: %s)\n", DEFAULT_BACKEND_NAME);
+	MAT_LOG(ERR, "  -d            run as a daemon\n");
+	MAT_LOG(ERR, "  -f family_id  netlink family id\n");
+	MAT_LOG(ERR, "  -h            display this help and exit\n");
+	MAT_LOG(ERR, "  -l            list available backends and exit\n");
+	MAT_LOG(ERR, "  -s            add all ports to default vlan (ies_pipeline only)\n");
 }
 
 static int matchd_create_pid(void)
@@ -117,7 +119,7 @@ static int matchd_create_pid(void)
 }
 
 static void matchd_int_handler(int sig __unused) {
-	printf("\nmatchd exiting...\n");
+	MAT_LOG(DEBUG, "\nmatchd exiting...\n");
 
 	matchd_uninit();
 
@@ -171,13 +173,13 @@ int main(int argc, char **argv)
 
 	rc = matchd_init(nsd, family, backend, &sw_args);
 	if (rc) {
-		fprintf(stderr, "Error: cannot init matchd\n");
+		MAT_LOG(ERR, "Error: cannot init matchd\n");
 		exit(-1);
 	}
 
 	err = matchd_create_pid();
 	if (err) {
-		fprintf(stderr, "matchd create pid failed\n");
+		MAT_LOG(ERR, "matchd create pid failed\n");
 		exit(-1);
 	}
 
@@ -185,7 +187,7 @@ int main(int argc, char **argv)
 	sigaction(SIGINT, &sig_act, NULL);
 
 	while (1) {
-		printf("Waiting for message\n");
+		MAT_LOG(DEBUG, "Waiting for message\n");
 		rc = nl_recv(nsd, &dest_addr, &buf, NULL);
 		if(rc < 0) {
 			printf("%s:receive error on netlink socket:%d\n",
@@ -198,7 +200,7 @@ int main(int argc, char **argv)
 
 		err = matchd_rx_process((struct nlmsghdr *)buf);
 		if (err < 0)
-			fprintf(stderr, "%s: Warning: parsing error\n",
+			MAT_LOG(ERR, "%s: Warning: parsing error\n",
 					__func__);
 		memset(buf, 0, rcv_size);
 	}
