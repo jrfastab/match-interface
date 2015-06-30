@@ -34,7 +34,7 @@ libmatchies_la_CFLAGS = $(AM_CFLAGS) $(IES_CFLAGS) $(CFLAGS)
 libmatchies_la_LDFLAGS = -release @MATCH_INTERFACE_VERSION@
 
 lib_LTLIBRARIES += libmatch.la
-libmatch_la_SOURCES = matchlib_nl.c matchlib.c
+libmatch_la_SOURCES = matchlib_nl.c matchlib.c matlog.c
 libmatch_la_LDFLAGS = -release @MATCH_INTERFACE_VERSION@
 
 lib_LTLIBRARIES += libmatchd.la
