@@ -1108,6 +1108,16 @@ static struct net_mat_field_ref matches_tcam[] = {
 	  .field = HEADER_VXLAN_VNI,
 	  .mask_type = NET_MAT_MASK_TYPE_MASK},
 
+	{ .instance = HEADER_INSTANCE_NSH,
+	  .header = HEADER_NSH,
+	  .field = HEADER_NSH_SERVICE_PATH_ID,
+	  .mask_type = NET_MAT_MASK_TYPE_MASK},
+
+	{ .instance = HEADER_INSTANCE_NSH,
+	  .header = HEADER_NSH,
+	  .field = HEADER_NSH_SERVICE_INDEX,
+	  .mask_type = NET_MAT_MASK_TYPE_MASK},
+
 	{ .instance = 0, .field = 0},
 };
 
