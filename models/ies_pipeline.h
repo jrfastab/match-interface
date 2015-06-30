@@ -148,6 +148,10 @@ static char pci_function_str[] = "pci_function";
 static char forward_vsi_str[] = "forward_vsi";
 static char egress_set_str[] = "egress_set";
 static char egress_ports_str[] = "port";
+static char vxlan_gpe_str[] = "vxlan_gpe";
+static char nsh_str[] = "nsh";
+static char md_type[] = "md_type";
+static char next_protocol[] = "next_protocol";
 static char service_path_id[] = "service_path_id";
 static char service_index[] = "service_index";
 static char tunnel_encap_nsh_str[] = "tunnel_encap_nsh";
@@ -161,6 +165,8 @@ enum ies_header_ids {
 	HEADER_TCP,
 	HEADER_UDP,
 	HEADER_METADATA,
+	HEADER_VXLAN_GPE,
+	HEADER_NSH,
 };
 
 enum ies_header_ethernet_ids {
@@ -419,6 +425,74 @@ static struct net_mat_hdr metadata_t = {
 	.fields = metadata_fields,
 };
 
+enum ies_header_vxlan_gpe_ids {
+	HEADER_VXLAN_GPE_FLAGS = 1,
+	HEADER_VXLAN_GPE_RESERVED1,
+	HEADER_VXLAN_GPE_NEXT_PROTOCOL,
+	HEADER_VXLAN_GPE_VNI,
+	HEADER_VXLAN_GPE_RESERVED2,
+};
+
+static struct net_mat_field vxlan_gpe_fields[] = {
+	{ .name = flags, .uid = HEADER_VXLAN_GPE_FLAGS, .bitwidth = 8,},
+	{ .name = reserved1, .uid = HEADER_VXLAN_GPE_RESERVED1, .bitwidth = 16,},
+	{ .name = next_protocol, .uid = HEADER_VXLAN_GPE_NEXT_PROTOCOL, .bitwidth = 8,},
+	{ .name = vni, .uid = HEADER_VXLAN_GPE_VNI, .bitwidth = 24,},
+	{ .name = reserved2, .uid = HEADER_VXLAN_GPE_RESERVED2, .bitwidth = 8,},
+};
+
+static struct net_mat_hdr vxlan_gpe = {
+	.name = vxlan_gpe_str,
+	.uid = HEADER_VXLAN_GPE,
+	.field_sz = ARRAY_SIZE(vxlan_gpe_fields),
+	.fields = vxlan_gpe_fields,
+};
+
+enum ies_header_nsh_ids {
+	HEADER_NSH_VER = 1,
+	HEADER_NSH_FLAGS,
+	HEADER_NSH_RESERVED1,
+	HEADER_NSH_LENGTH,
+	HEADER_NSH_MD_TYPE,
+	HEADER_NSH_NEXT_PROTOCOL,
+	HEADER_NSH_SERVICE_PATH_ID,
+	HEADER_NSH_SERVICE_INDEX,
+};
+
+static struct net_mat_field nsh_fields[] = {
+	{ .name = version,
+	  .uid = HEADER_NSH_VER,
+	  .bitwidth = 2,},
+	{ .name = flags,
+	  .uid = HEADER_NSH_FLAGS,
+	  .bitwidth = 2,},
+	{ .name = reserved1,
+	  .uid = HEADER_NSH_RESERVED1,
+	  .bitwidth = 5,},
+	{ .name = length,
+	  .uid = HEADER_NSH_LENGTH,
+	  .bitwidth = 6,},
+	{ .name = md_type,
+	  .uid = HEADER_NSH_MD_TYPE,
+	  .bitwidth = 8,},
+	{ .name = next_protocol,
+	  .uid = HEADER_NSH_NEXT_PROTOCOL,
+	  .bitwidth = 8,},
+	{ .name = service_path_id,
+	  .uid = HEADER_NSH_SERVICE_PATH_ID,
+	  .bitwidth = 24,},
+	{ .name = service_index,
+	  .uid = HEADER_NSH_SERVICE_INDEX,
+	  .bitwidth = 8,},
+};
+
+static struct net_mat_hdr nsh = {
+	.name = nsh_str,
+	.uid = HEADER_NSH,
+	.field_sz = ARRAY_SIZE(nsh_fields),
+	.fields = nsh_fields,
+};
+
 static struct net_mat_hdr *my_header_list[] = {
 	&ethernet,
 	&vlan,
@@ -427,6 +501,8 @@ static struct net_mat_hdr *my_header_list[] = {
 	&udp,
 	&vxlan,
 	&metadata_t,
+	&vxlan_gpe,
+	&nsh,
 	NULL,
 };
 
@@ -823,7 +899,9 @@ enum ies_header_instance {
 	HEADER_INSTANCE_TE_A_METADATA,
 	HEADER_INSTANCE_TE_B_METADATA,
 	HEADER_INSTANCE_DIRECT_INDEX_METADATA,
-	HEADER_INSTANCE_L2_MP_METADATA
+	HEADER_INSTANCE_L2_MP_METADATA,
+	HEADER_INSTANCE_VXLAN_GPE,
+	HEADER_INSTANCE_NSH,
 };
 
 static struct net_mat_field_ref matches_nexthop[] = {
@@ -1337,6 +1415,7 @@ static struct net_mat_hdr_node my_header_node_ipv4 = {
 };
 
 #define VXLAN_UDP_PORT 1234
+#define VXLAN_GPE_UDP_PORT 4790
 
 static struct net_mat_jump_table my_parse_udp[] = {
 	{
@@ -1347,6 +1426,18 @@ static struct net_mat_jump_table my_parse_udp[] = {
 			.type = NET_MAT_FIELD_REF_ATTR_TYPE_U16,
 			.v.u16 = {
 				.value_u16 = VXLAN_UDP_PORT,
+				.mask_u16 = 0xFFFF,
+			}
+		}
+	},
+	{
+		.node = HEADER_INSTANCE_VXLAN_GPE,
+		.field = {
+			.header = HEADER_UDP,
+			.field = HEADER_UDP_DST_PORT,
+			.type = NET_MAT_FIELD_REF_ATTR_TYPE_U16,
+			.v.u16 = {
+				.value_u16 = VXLAN_GPE_UDP_PORT,
 				.mask_u16 = 0xFFFF,
 			}
 		}
@@ -1538,6 +1629,42 @@ static struct net_mat_hdr_node my_header_node_l2mp_metadata = {
 	.jump = my_terminal_headers,
 };
 
+static struct net_mat_jump_table my_parse_vxlan_gpe[] = {
+	{
+		.node = HEADER_INSTANCE_NSH,
+		.field = {0},
+	},
+	{
+		.node = 0,
+	},
+};
+
+static __u32 my_vxlan_gpe_headers[] = {HEADER_VXLAN_GPE, 0};
+static struct net_mat_hdr_node my_header_node_vxlan_gpe = {
+	.name = vxlan_gpe_str,
+	.uid = HEADER_INSTANCE_VXLAN_GPE,
+	.hdrs = my_vxlan_gpe_headers,
+	.jump = my_parse_vxlan_gpe,
+};
+
+static struct net_mat_jump_table my_parse_nsh[] = {
+	{
+		.node = HEADER_INSTANCE_ETHERNET_INNER,
+		.field = {0},
+	},
+	{
+		.node = 0,
+	},
+};
+
+static __u32 my_nsh_headers[] = {HEADER_NSH, 0};
+static struct net_mat_hdr_node my_header_node_nsh = {
+	.name = nsh_str,
+	.uid = HEADER_INSTANCE_NSH,
+	.hdrs = my_nsh_headers,
+	.jump = my_parse_nsh,
+};
+
 static struct net_mat_hdr_node *my_hdr_nodes[] = {
 	&my_header_node_ethernet,
 	&my_header_node_vlan,
@@ -1556,6 +1683,8 @@ static struct net_mat_hdr_node *my_hdr_nodes[] = {
 	&my_header_node_teb_metadata,
 	&my_header_node_direct_index_metadata,
 	&my_header_node_l2mp_metadata,
+	&my_header_node_vxlan_gpe,
+	&my_header_node_nsh,
 	NULL,
 };
 
