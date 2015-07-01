@@ -203,7 +203,7 @@ static void set_rule_usage(void)
 	printf("Usage: %s set_rule prio NUM handle NUM table NUM match MATCH [match MATCH...] action ACTION [ACTION_ARG...] [action ACTION [ACTION_ARG...]...]\n", progname);
 	printf("\n");
 	printf("Where:\n");
-	printf("  prio   is the priority of new rule (0 is highest)\n");
+	printf("  prio   is the priority of new rule (1 is lowest)\n");
 	printf("  handle is the id of new rule\n");
 	printf("  table  is the table id in which to add the rule\n");
 	printf("  match  is one or more criteria for the rule to match\n");
