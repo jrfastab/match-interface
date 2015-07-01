@@ -50,6 +50,7 @@
 
 #define FM_MAIN_SWITCH         0
 #define FM_DEFAULT_VLAN 1
+#define MATCH_DEEP_INSPECTION_PROFILE_NSH 4
 #define MATCH_DEEP_INSPECTION_PROFILE 5
 #define MATCH_NSH_PORT 4790
 #define MATCH_VXLAN_GPE_NSH_PROTO 4
@@ -785,6 +786,48 @@ static int configure_deep_inspection(void)
 	err = fmSetSwitchAttribute(sw, FM_SWITCH_PARSER_DI_CFG, &dip_expect);
 	if (err != FM_OK) {
 		MAT_LOG(ERR, "Error: deep inspection parser\n");
+		return cleanup("fmSetSwitchAttribute", err);
+	}
+
+	return 0;
+}
+
+static int configure_deep_inspection_nsh(void)
+{
+	int err;
+	fm_parserDiCfg dip;
+	fm_parserDiCfg dip_expect = {
+		.index = MATCH_DEEP_INSPECTION_PROFILE_NSH,
+		.parserDiCfgFields = {
+			.enable = 1,
+			.protocol = 0x11, /* UDP */
+			.l4Port = MATCH_NSH_PORT, /* VXLAN-GPE */
+			.l4Compare = 1,
+			.wordOffset = 0x76543210,
+		},
+	};
+
+	/* read existing deep inspection configuration */
+	memset(&dip, 0, sizeof(dip));
+	dip.index = MATCH_DEEP_INSPECTION_PROFILE_NSH;
+
+	err = fmGetSwitchAttribute(sw, FM_SWITCH_PARSER_DI_CFG, &dip);
+	if (err != FM_OK) {
+		fprintf(stderr, "Error: get deep inspection parser\n");
+		return cleanup("fmGetSwitchAttribute", err);
+	}
+
+	if (!memcmp(&dip, &dip_expect, sizeof(dip)))
+		/* parser is configured as expected */
+		return 0;
+	else if (dip.parserDiCfgFields.enable)
+		/* parser is configured, but not as expected */
+		return -EEXIST;
+
+	/* parser needs to be configured */
+	err = fmSetSwitchAttribute(sw, FM_SWITCH_PARSER_DI_CFG, &dip_expect);
+	if (err != FM_OK) {
+		fprintf(stderr, "Error: deep inspection parser\n");
 		return cleanup("fmSetSwitchAttribute", err);
 	}
 
@@ -1788,6 +1831,24 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 			}
 
 			break;
+		case HEADER_INSTANCE_NSH:
+			switch(matches[i].field) {
+			case HEADER_NSH_SERVICE_PATH_ID:
+			case HEADER_NSH_SERVICE_INDEX:
+				if (configure_deep_inspection_nsh()) {
+					MAT_LOG(ERR, "deep inspection nsh\n");
+					err = -EINVAL;
+					break;
+				}
+				condition |= FM_FLOW_MATCH_L4_DEEP_INSPECTION;
+				break;
+			default:
+				MAT_LOG(ERR, "match error in HEADER_NSH, field=%d\n", matches[i].field);
+				err = -EINVAL;
+				break;
+			}
+
+			break;
 		default:
 			MAT_LOG(ERR, "%s: match error in INSTANCE, instance=%d\n", __func__, matches[i].field);
 			err = -EINVAL;
@@ -2171,37 +2232,64 @@ static int
 set_vni_cond(__u32 vni, __u32 mask,
              fm_flowCondition *cond, fm_flowValue *condVal)
 {
-	fm_byte L4DeepInspection[FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES];
-	fm_byte L4DeepInspectionMask[FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES];
 	static const int vni_bits = 24;
 	static const int vni_offset = 4;
+	fm_byte *di_val;
+	fm_byte *di_mask;
 
 	if (!cond || !condVal)
 		return -EINVAL;
 
 	/* VNI can only be 24 bits long */
-	if ((vni > (__u32)(1 << vni_bits) - 1) ||
-	    (mask > (__u32)(1 << vni_bits) - 1))
+	if ((vni > (1U << vni_bits) - 1) || (mask > (1U << vni_bits) - 1))
 		return -ERANGE;
 
-	memset(L4DeepInspection, 0x0, sizeof(L4DeepInspection));
-	memset(L4DeepInspectionMask, 0x0, sizeof(L4DeepInspectionMask));
+	di_val = condVal->L4DeepInspection;
+	di_mask = condVal->L4DeepInspectionMask;
 
-	/* VNI appears 8 bytes into the VXLAN header */
-	L4DeepInspection[vni_offset + 0] = ((__u8 *)&vni)[2];
-	L4DeepInspection[vni_offset + 1] = ((__u8 *)&vni)[1];
-	L4DeepInspection[vni_offset + 2] = ((__u8 *)&vni)[0];
+	/* VNI appears 4 bytes into the VXLAN header */
+	di_val[vni_offset + 0] = ((__u8 *)&vni)[2];
+	di_val[vni_offset + 1] = ((__u8 *)&vni)[1];
+	di_val[vni_offset + 2] = ((__u8 *)&vni)[0];
 
-	L4DeepInspectionMask[vni_offset + 0] = ((__u8 *)&mask)[2];
-	L4DeepInspectionMask[vni_offset + 1] = ((__u8 *)&mask)[1];
-	L4DeepInspectionMask[vni_offset + 2] = ((__u8 *)&mask)[0];
+	di_mask[vni_offset + 0] = ((__u8 *)&mask)[2];
+	di_mask[vni_offset + 1] = ((__u8 *)&mask)[1];
+	di_mask[vni_offset + 2] = ((__u8 *)&mask)[0];
 
 	*cond |= FM_FLOW_MATCH_L4_DEEP_INSPECTION;
 
-	memcpy(condVal->L4DeepInspection, L4DeepInspection,
-	       FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES);
-	memcpy(condVal->L4DeepInspectionMask, L4DeepInspectionMask,
-	       FM_MAX_ACL_L4_DEEP_INSPECTION_BYTES);
+	return 0;
+}
+
+static int
+set_nsh_spi_cond(__u32 spi, __u32 mask,
+                 fm_flowCondition *cond, fm_flowValue *condVal)
+{
+	static const int spi_bits = 24;
+	static const int spi_offset = 12;
+	fm_byte *di_val;
+	fm_byte *di_mask;
+
+	if (!cond || !condVal)
+		return -EINVAL;
+
+	/* Service Path ID can only be 24 bits long */
+	if ((spi > (1U << spi_bits) - 1) || (mask > (1U << spi_bits) - 1))
+		return -ERANGE;
+
+	di_val = condVal->L4DeepInspection;
+	di_mask = condVal->L4DeepInspectionMask;
+
+	/* SPI appears 4 bytes into the NSH header, after VXLAN-GPE */
+	di_val[spi_offset + 0] = ((__u8 *)&spi)[2];
+	di_val[spi_offset + 1] = ((__u8 *)&spi)[1];
+	di_val[spi_offset + 2] = ((__u8 *)&spi)[0];
+
+	di_mask[spi_offset + 0] = ((__u8 *)&mask)[2];
+	di_mask[spi_offset + 1] = ((__u8 *)&mask)[1];
+	di_mask[spi_offset + 2] = ((__u8 *)&mask)[0];
+
+	*cond |= FM_FLOW_MATCH_L4_DEEP_INSPECTION;
 
 	return 0;
 }
@@ -2216,6 +2304,12 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 	fm_flowParam param;
 	__u32 vni;
 	__u32 vni_mask;
+	__u32 spi;
+	__u32 spi_mask;
+	__u8 si;
+	__u8 si_mask;
+	/* nsh service index appears 15B following UDP header */
+	const int si_off = 15;
 	__u32 group_id;
 #ifdef VXLAN_MCAST
 	struct my_mcast_listener mcast_listeners[MAX_LISTENERS_PER_GROUP];
@@ -2376,11 +2470,41 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 
 #ifdef DEBUG
 				MAT_LOG(DEBUG, "%s: match VNI/MASK (%u/0x%x)\n",
-				       __func__, vni, vni_mask);
+				        __func__, vni, vni_mask);
 #endif
 				break;
 			default:
 				MAT_LOG(ERR, "match error in HEADER_INSTANCE_VXLAN, field=%d\n", matches[i].field);
+				err = -EINVAL;
+			}
+			break;
+		case HEADER_INSTANCE_NSH:
+			switch(matches[i].field) {
+			case HEADER_NSH_SERVICE_PATH_ID:
+				spi = matches[i].v.u32.value_u32;
+				spi_mask = matches[i].v.u32.mask_u32;
+
+				err = set_nsh_spi_cond(spi, spi_mask, &cond, &condVal);
+
+#ifdef DEBUG
+				MAT_LOG(DEBUG, "%s: match service_path_id/MASK (%u/0x%x)\n",
+				       __func__, spi, spi_mask);
+#endif
+				break;
+			case HEADER_NSH_SERVICE_INDEX:
+				si = matches[i].v.u8.value_u8;
+				si_mask = matches[i].v.u8.mask_u8;
+
+				cond |= FM_FLOW_MATCH_L4_DEEP_INSPECTION;
+				condVal.L4DeepInspection[si_off] = si;
+				condVal.L4DeepInspectionMask[si_off] = si_mask;
+#ifdef DEBUG
+				MAT_LOG(ERR, "%s: match service_index/MASK (%u/0x%x)\n",
+				        __func__, si, si_mask);
+#endif
+				break;
+			default:
+				MAT_LOG(ERR, "match error in HEADER_INSTANCE_NSH, field=%d\n", matches[i].field);
 				err = -EINVAL;
 			}
 			break;
