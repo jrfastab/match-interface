@@ -78,7 +78,7 @@ dnl Process makefiles and any other files that need to be. This takes a
 dnl file.in (Makefile.in) and processes it correctly to the name specified
 dnl below.
 AC_CONFIG_FILES([
-Makefile lib/Makefile man/Makefile src/Makefile
+Makefile lib/Makefile man/Makefile src/Makefile tests/nl/Makefile
 dist/match-interface.pc
 dist/matchd-api.pc
 dist/match-interface.spec])

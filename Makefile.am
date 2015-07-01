@@ -1,6 +1,6 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = lib man src
+SUBDIRS = lib man src tests/nl
 
 include_HEADERS = $(top_srcdir)/include/backend.h \
                   $(top_srcdir)/include/matchd_lib.h \
