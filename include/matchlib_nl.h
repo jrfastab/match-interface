@@ -39,6 +39,8 @@ struct match_msg {
 
 struct nl_sock *match_nl_get_socket(void);
 
+uint32_t match_pid_lookup(void);
+
 struct net_mat_hdr *match_nl_get_headers(struct nl_sock *nsd, uint32_t pid,
 					 unsigned int ifindex, int family);
 struct net_mat_action *match_nl_get_actions(struct nl_sock *nsd, uint32_t pid,

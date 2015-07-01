@@ -103,6 +103,27 @@ struct nl_sock *match_nl_get_socket(void)
 	return nsd;
 }
 
+uint32_t match_pid_lookup(void)
+{
+	FILE *fd = fopen(MATCHLIB_PID_FILE, "r");
+	uint32_t pid;
+	int err;
+
+	if (!fd) {
+		MAT_LOG(ERR, "no hardware support, daemon is not listening\n");
+		return 0;
+	}
+
+	err = fscanf(fd, "%" SCNu32 "", &pid);
+	if (err < 0) {
+		MAT_LOG(ERR, "Error: pid not found\n");
+		return 0;
+	}
+
+	fclose(fd);
+	return pid;
+}
+
 struct net_mat_hdr *match_nl_get_headers(struct nl_sock *nsd, uint32_t pid,
 					 unsigned int ifindex, int family)
 {
