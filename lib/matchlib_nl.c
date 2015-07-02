@@ -141,7 +141,7 @@ struct net_mat_hdr *match_nl_get_headers(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse get headers msg\n");
 			goto out;
 		}
 
@@ -177,7 +177,7 @@ struct net_mat_action *match_nl_get_actions(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse get actions msg\n");
 			goto out;
 		}
 
@@ -213,7 +213,7 @@ struct net_mat_tbl *match_nl_get_tables(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse get tables msg\n");
 			goto out;
 		}
 
@@ -251,7 +251,7 @@ struct net_mat_hdr_node *match_nl_get_hdr_graph(struct nl_sock *nsd,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse get header graph msg\n");
 			goto out;
 		}
 
@@ -290,7 +290,7 @@ struct net_mat_tbl_node *match_nl_get_tbl_graph(struct nl_sock *nsd,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse get table graph msg\n");
 			goto out;
 		}
 
@@ -368,7 +368,7 @@ int match_nl_set_del_rules(struct nl_sock *nsd, uint32_t pid,
 	nlh = msg->msg;
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		MAT_LOG(ERR, "Warning unable to parse set rules msg\n");
+		MAT_LOG(ERR, "Warning: unable to parse set rules msg\n");
 		match_nl_free_msg(msg);
 		return err;
 	}
@@ -461,7 +461,7 @@ struct net_mat_rule *match_nl_get_rules(struct nl_sock *nsd, uint32_t pid,
 		nlh = msg->msg;
 		err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get rules msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse get rules msg\n");
 			goto out;
 		}
 
@@ -534,7 +534,7 @@ int match_nl_set_port(struct nl_sock *nsd, uint32_t pid,
 	nlh = msg->msg;
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		MAT_LOG(ERR, "Warning unable to parse set port msg\n");
+		MAT_LOG(ERR, "Warning: unable to parse set port msg\n");
 		match_nl_free_msg(msg);
 		return err;
 	}
@@ -616,7 +616,7 @@ struct net_mat_port *match_nl_get_ports(struct nl_sock *nsd, uint32_t pid,
 		nlh = msg->msg;
 		err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get rules msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse get rules msg\n");
 			goto out;
 		}
 
@@ -688,7 +688,7 @@ int match_nl_create_update_destroy_table(struct nl_sock *nsd, uint32_t pid,
 	nlh = msg->msg;
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		MAT_LOG(ERR, "Warning unable to parse create table msg\n");
+		MAT_LOG(ERR, "Warning: unable to parse create table msg\n");
 		match_nl_free_msg(msg);
 		return err;
 	}
@@ -866,12 +866,12 @@ int match_nl_table_cmd_to_type(FILE *fp, bool print, int valid,
 	}
 
 	if (valid > 0 && !tb[valid]) {
-		MAT_LOG(ERR, "Warning received cmd without valid attribute expected %i\n", valid);
+		MAT_LOG(ERR, "Warning: received cmd without valid attribute expected %i\n", valid);
 		return -ENOMSG;
 	}
 
 	if (nla_len(tb[NET_MAT_IDENTIFIER_TYPE]) < (int)sizeof(type)) {
-		MAT_LOG(ERR, "Warning invalid identifier type len\n");
+		MAT_LOG(ERR, "Warning: invalid identifier type len\n");
 		return -EINVAL;
 	}
 
@@ -896,7 +896,7 @@ int match_nl_table_cmd_to_type(FILE *fp, bool print, int valid,
 			pfprintf(fp, print, "%s (%u):\n", iface, ifindex);
 		break;
 	default:
-		MAT_LOG(ERR, "Warning unknown interface identifier type %i\n", type);
+		MAT_LOG(ERR, "Warning: unknown interface identifier type %i\n", type);
 		break;
 	}
 
@@ -1021,7 +1021,7 @@ int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 		err = genlmsg_parse(nlh, 0, tb,
 				    NET_MAT_MAX, match_get_tables_policy);
 		if (err < 0) {
-			MAT_LOG(ERR, "Warning unable to parse get tables msg\n");
+			MAT_LOG(ERR, "Warning: unable to parse pci to lport msg\n");
 			match_nl_free_msg(msg);
 			return -EINVAL;
 		}

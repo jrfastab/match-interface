@@ -322,7 +322,7 @@ static void match_cmd_get_tables(struct match_msg *msg, int verbose)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse get tables msg\n");
+		fprintf(stderr, "Warning: unable to parse get tables msg\n");
 		return;
 	}
 
@@ -343,7 +343,7 @@ static void match_cmd_get_headers(struct match_msg *msg, int verbose)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse get tables msg\n");
+		fprintf(stderr, "Warning: unable to parse get headers msg\n");
 		return;
 	}
 
@@ -362,7 +362,7 @@ static void match_cmd_get_actions(struct match_msg *msg, int verbose)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse get tables msg\n");
+		fprintf(stderr, "Warning: unable to parse get actions msg\n");
 		return;
 	}
 
@@ -381,7 +381,7 @@ static void match_cmd_get_headers_graph(struct match_msg *msg, int verbose)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse get tables msg\n");
+		fprintf(stderr, "Warning: unable to parse get header graph msg\n");
 		return;
 	}
 
@@ -401,7 +401,7 @@ static void match_cmd_get_table_graph(struct match_msg *msg, int verbose)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse get tables msg\n");
+		fprintf(stderr, "Warning: unable to parse get table graph msg\n");
 		return;
 	}
 
@@ -421,7 +421,7 @@ static void match_cmd_get_rules(struct match_msg *msg, int verbose)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse get rules msg\n");
+		fprintf(stderr, "Warning: unable to parse get rules msg\n");
 		return;
 	}
 
@@ -430,7 +430,7 @@ static void match_cmd_get_rules(struct match_msg *msg, int verbose)
 		fprintf(stdout, "Table empty\n");
 		return;
 	} else if (err) {
-		fprintf(stderr, "Warning recevied cmd without valid attribute expected %i\n", NET_MAT_RULES);
+		fprintf(stderr, "Warning: recevied cmd without valid attribute expected %i\n", NET_MAT_RULES);
 		return;
 	}
 
@@ -446,7 +446,7 @@ static void match_cmd_set_rules(struct match_msg *msg, int verbose)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse set rules msg\n");
+		fprintf(stderr, "Warning: unable to parse set rules msg\n");
 		return;
 	}
 
@@ -468,7 +468,7 @@ static void match_cmd_del_rules(struct match_msg *msg, int verbose __unused)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse del rules msg\n");
+		fprintf(stderr, "Warning: unable to parse del rules msg\n");
 		return;
 	}
 
@@ -484,7 +484,7 @@ match_cmd_update_rules(struct match_msg *msg, int verbose __unused)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse update tables msg\n");
+		fprintf(stderr, "Warning: unable to parse update tables msg\n");
 		return;
 	}
 	fprintf(stderr, "update match cmd not supported\n");
@@ -499,7 +499,7 @@ match_cmd_create_table(struct match_msg *msg, int verbose __unused)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse create table msg\n");
+		fprintf(stderr, "Warning: unable to parse create table msg\n");
 		return;
 	}
 }
@@ -513,7 +513,7 @@ match_cmd_destroy_table(struct match_msg *msg, int verbose __unused)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse destroy table msg\n");
+		fprintf(stderr, "Warning: unable to parse destroy table msg\n");
 		return;
 	}
 }
@@ -527,7 +527,7 @@ match_cmd_get_ports(struct match_msg *msg, int verbose __unused)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse get ports msg\n");
+		fprintf(stderr, "Warning: unable to parse get ports msg\n");
 		return;
 	}
 
@@ -538,7 +538,7 @@ match_cmd_get_ports(struct match_msg *msg, int verbose __unused)
 	if (tb[NET_MAT_PORTS]) {
 		err = match_get_ports(stdout, verbose, tb[NET_MAT_PORTS], NULL);
 		if (err)
-			fprintf(stderr, "Warning unable to parse get ports\n");
+			fprintf(stderr, "Warning: unable to parse get ports\n");
 	}
 }
 
@@ -551,7 +551,7 @@ match_cmd_set_ports(struct match_msg *msg, int verbose __unused)
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err < 0) {
-		fprintf(stderr, "Warning unable to parse set ports msg\n");
+		fprintf(stderr, "Warning: unable to parse set ports msg\n");
 		return;
 	}
 
@@ -562,7 +562,7 @@ match_cmd_set_ports(struct match_msg *msg, int verbose __unused)
 	if (tb[NET_MAT_PORTS]) {
 		err = match_get_ports(stdout, verbose, tb[NET_MAT_PORTS], NULL);
 		if (err)
-			fprintf(stderr, "Warning unable to parse get ports\n");
+			fprintf(stderr, "Warning: unable to parse get ports\n");
 	}
 }
 
@@ -885,7 +885,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 
 	i = find_action(*argv);
 	if (!i) {
-		fprintf(stderr, "Warning unknown action\n");
+		fprintf(stderr, "Warning: unknown action\n");
 		return -EINVAL;
 	}
 
