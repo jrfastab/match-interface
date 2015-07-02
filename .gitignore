@@ -42,3 +42,4 @@ match-interface.spec
 matchd-api.pc
 match
 matchd
+tests/nl/nl_get_attr_ex
