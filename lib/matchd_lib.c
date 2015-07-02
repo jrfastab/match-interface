@@ -1663,7 +1663,7 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 	     i = nla_next(i, &rem))
 		count++;
 
-	ports = (struct net_mat_port *)calloc(count, sizeof(*ports));
+	ports = (struct net_mat_port *)calloc(count + 1, sizeof(*ports));
 
 	if(!ports)
 		return -ENOMEM;
