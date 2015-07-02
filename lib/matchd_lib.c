@@ -773,6 +773,61 @@ match_is_valid_action(__u32 *actions, struct net_mat_action *a)
        return -EINVAL;
 }
 
+ /*
+ * Validate match value's mask.
+ *
+ * Exact matches must be fully masked.  Lookup the field based on the
+ * header and field indices to determine the field's length in bits.
+ * An exact match must have all bits set in the mask field.
+ *
+ * @param fref
+ *   Table field ref defining the mask type
+ * @param fr
+ *   Rule field ref defining the mask value
+ * @return 0 on success or -EINVAL on failure.
+ */
+static int
+match_is_valid_mask(struct net_mat_field_ref *fref,
+                    struct net_mat_field_ref *fr)
+{
+	struct net_mat_field *field;
+	__u64 mask;
+	int err = 0;
+
+	if (fref->mask_type == NET_MAT_MASK_TYPE_EXACT) {
+		field = get_fields(fr->header, fr->field);
+		if (!field) {
+			MAT_LOG(ERR, "Error: invalid header/field\n");
+			return -EINVAL;
+		}
+
+		mask = (1ULL << field->bitwidth) - 1;
+
+		switch(fr->type) {
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U8:
+			err = (fr->v.u8.mask_u8 == mask) ? 0 : -EINVAL;
+			break;
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U16:
+			err = (fr->v.u16.mask_u16 == mask) ? 0 : -EINVAL;
+			break;
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U32:
+			err = (fr->v.u32.mask_u32 == mask) ? 0 : -EINVAL;
+			break;
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U64:
+			err = (fr->v.u64.mask_u64 == mask) ? 0 : -EINVAL;
+			break;
+		default:
+			err = -EINVAL;
+		}
+
+		if (err) {
+			MAT_LOG(ERR, "Error: Exact match requires full mask\n");
+		}
+	}
+
+	return err;
+}
+
 /*
  * match_is_valid_match() - validate a match against a table's matches
  * @fields: the fields in a table to validate against
@@ -788,7 +843,8 @@ match_is_valid_match(struct net_mat_field_ref *fields,
 
        for (i = 0; fields[i].header; i++) {
 	       if (f->header == fields[i].header &&
-		   f->field == fields[i].field)
+		   f->field == fields[i].field &&
+		   !match_is_valid_mask(&fields[i], f))
 		       return 0;
        }
 
@@ -1144,6 +1200,27 @@ match_set_dyn_tbl_actions(struct net_mat_tbl *table,
 	return 0;
 }
 
+/* verify that new table specifies valid match masks */
+static int match_check_field_masks(struct net_mat_tbl *table,
+                                   struct net_mat_tbl *new_table)
+{
+	int i;
+	int j;
+
+	for (i = 0; new_table->matches[i].instance; ++i) {
+		for (j = 0; table->matches[j].instance; ++j) {
+			if (new_table->matches[i].instance ==
+			    table->matches[j].instance) {
+				if (new_table->matches[i].mask_type !=
+				    table->matches[j].mask_type)
+					return -EINVAL;
+			}
+		}
+	}
+
+	return 0;
+}
+
 static int match_cmd_table(struct nlmsghdr *nlh)
 {
 	struct genlmsghdr *glh = nlmsg_data(nlh);
@@ -1275,6 +1352,12 @@ static int match_cmd_table(struct nlmsghdr *nlh)
 
 			if (match_set_dyn_tbl_matches(src, &tables[i])) {
 				MAT_LOG(ERR, "Dynamic table's matches must be a subset of the source table's matches\n");
+				err = -EINVAL;
+				goto nla_put_failure;
+			}
+
+			if (match_check_field_masks(src, &tables[i])) {
+				MAT_LOG(ERR, "Match mask(s) invalid\n");
 				err = -EINVAL;
 				goto nla_put_failure;
 			}
