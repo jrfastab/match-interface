@@ -58,7 +58,6 @@
 fm_semaphore seqSem;
 fm_int sw = FM_MAIN_SWITCH;
 
-static int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function);
 static struct my_ecmp_group ecmp_group[TABLE_NEXTHOP_SIZE];
 static int l2mp_group[TABLE_L2_MP_SIZE];
 static __u32 dummy_nh_ipaddr = 0x01010000;
@@ -689,20 +688,110 @@ static int ies_ports_set(struct net_mat_port *ports)
 	return err;
 }
 
+/*
+ * Convert a PCI address to a PEP number.
+ *
+ * The PEP number is read from the Vital Product Data (VPD)
+ * file stored in the device's pci sysfs directory.
+ *
+ * The PCI domain is hardcoded to 0 for now.
+ *
+ * The PCI device and functions are hardcoded to 0 because the VPD
+ * file is only present for the physical function, which is device 0,
+ * function 0.
+ *
+ * @param bus
+ *   The pci bus number.
+ *
+ * @return
+ *   The PEP number on success, or a negative error code.
+ */
+#define PCI_PATH_BASE "/sys/bus/pci/devices"
+#define PCI_DEV_FMT "0000:%02" PRIx8 ":00.0"
+#define PCI_VPD "vpd"
+static int pci_to_pep(uint8_t bus)
+{
+	char fname[PATH_MAX];
+	uint32_t buf[BUFSIZ];
+	FILE *f;
+	size_t n;
+	int err;
+
+	/* read Vital Product Data from sysfs pci device file */
+	err = snprintf(fname, sizeof(fname),
+		       PCI_PATH_BASE "/" PCI_DEV_FMT "/" PCI_VPD, bus);
+
+	if (err < 0 || err >= (int)sizeof(fname))
+		return -ENOMEM;
+
+	f = fopen(fname, "r");
+	if (!f) {
+		MAT_LOG(ERR, "Error: Cannot open %s\n", fname);
+		return -errno;
+	}
+
+	n = fread(buf, sizeof(uint32_t), 8, f);
+	if (n != 8) {
+		MAT_LOG(ERR, "Error: Cannot read %s\n", fname);
+		fclose(f);
+		return -errno;
+	}
+
+	fclose(f);
+
+	/* pep index is stored in bits 12:9 of the sixth dword in the vpd */
+	return (int)((buf[5] & 0xf00) >> 8);
+}
+
 static int ies_port_get_lport(struct net_mat_port_pci *pci, unsigned int *lport)
 {
-	int n = pci_to_lport(pci->bus, pci->device, pci->function);
-	int err = 0;
+	int err;
+	int index;
+	int pep;
+	int port = -1;
+	int type;
 
-#ifdef DEBUG
-	MAT_LOG(DEBUG, "get_lport pci %u:%u.%u lport %i\n", pci->bus, pci->device, pci->function, n);
-#endif
-	if (n < 0)
-		err = n;
-	else
-		*lport = (unsigned int)n;
+	pep = pci_to_pep(pci->bus);
+	if (pep < 0) {
+		MAT_LOG(ERR, "Error: %02x:%02x.%d is not supported.\n",
+		        pci->bus, pci->device, pci->function);
+		return -EINVAL;
+	}
 
-	return err;
+	if (!pci->device && !pci->function) {
+		/* PF always has device == 0 and function == 0 */
+		index = 0;
+		type = FM_PCIE_PORT_PF;
+	} else if (pci->function < 8) {
+		/*
+		 * For a VF, there are up to 8 functions created per PCI
+		 * device. If there are more than 7 VFs created, the device
+		 * will be incremented, and the function numbering will
+		 * restart from 0.
+		 */
+		index = (pci->device * 8 + pci->function) - 1;
+		type = FM_PCIE_PORT_VF;
+	} else {
+		MAT_LOG(ERR, "Error: %02x:%02x.%d has invalid function.\n",
+		        pci->bus, pci->device, pci->function);
+		return -EINVAL;
+	}
+
+	err = fmGetPcieLogicalPort(sw, pep, type, index, &port);
+	if (err != FM_OK)
+		return cleanup("fmGetPcieLogicalPort", err);
+
+	if (port < 0) {
+		MAT_LOG(ERR, "Error: unexpected negative lport\n");
+		return -EINVAL;
+	}
+
+	*lport = (unsigned int)port;
+
+	MAT_LOG(DEBUG, "get_lport pci %u:%u.%u lport %d\n",
+	        pci->bus, pci->device, pci->function, *lport);
+
+	return 0;
 }
 
 struct match_backend ies_pipeline_backend = {
@@ -1327,215 +1416,6 @@ int switch_get_rule_counters(__u32 ruleid, __u32 switch_table_id,
 	return err;
 }
 
-/*
- * Get the PF/VF index given a glort.
- *
- * The PF/VF index is 0 if the glort maps to a Physical Function (PF).
- * The minimum and maximum VF indices are 1 and 64, respectively.
- *
- * GloRTs are assumed to be mapped by the host driver as follows:
- *    GloRT Range       PEP Index  PF/VF Index Range
- *  0x4000 - 0x403F ->    0           1-64
- *  0x4040 - 0x4040 ->    0            0 (physical function)
- *  0x4100 - 0x413F ->    1           1-64
- *  0x4140 - 0x4140 ->    1            0 (physical function)
- *  0x4200 - 0x423F ->    2           1-64
- *  0x4240 - 0x4240 ->    2            0 (physical function)
- *  0x4300 - 0x433F ->    3           1-64
- *  0x4340 - 0x4340 ->    3            0 (physical function)
- *  0x4400 - 0x443F ->    4           1-64
- *  0x4440 - 0x4440 ->    4            0 (physical function)
- *  0x4500 - 0x453F ->    5           1-64
- *  0x4540 - 0x4540 ->    5            0 (physical function)
- *  0x4600 - 0x463F ->    6           1-64
- *  0x4640 - 0x4640 ->    6            0 (physical function)
- *  0x4700 - 0x473F ->    7           1-64
- *  0x4740 - 0x4740 ->    7            0 (physical function)
- *  0x4800 - 0x483F ->    8           1-64
- *  0x4840 - 0x4840 ->    8            0 (physical function)
- *
- * @param glort
- *   The glort tag
- * @return The PF/VF index on success or -EINVAL if the glort is invalid
- */
-#define GLORT_MIN 0x4000
-#define GLORT_MAX 0x4840
-#define GLORT_PFVF_MASK 0xFF
-#define GLORT_PF_ID 64
-static int glort_to_pfvf(uint32_t glort)
-{
-	uint32_t pfvf = 0;
-
-	if (glort < GLORT_MIN || glort > GLORT_MAX)
-		return -EINVAL;
-
-	pfvf = glort & GLORT_PFVF_MASK;
-	if (pfvf < GLORT_PF_ID) {
-		/* pfvf is a valid virtual function */
-		pfvf += 1;
-	} else if (pfvf == GLORT_PF_ID) {
-		/* pfvf is a valid physical function */
-		pfvf = 0;
-	} else {
-		/* pfvf is invalid */
-		return -EINVAL;
-	}
-
-	return (int)pfvf;
-}
-
-/*
- * Get the PEP number given a glort.
- *
- * Only PEPs 0-8 are valid.
- *
- * @param glort
- *   The glort tag
- * @return PEP number on success or -EINVAL.
- */
-#define GLORT_PEP_MASK 0xF00
-#define GLORT_PEP_SHIFT 8
-#define GLORT_PEP_MAX 8
-static inline int glort_to_pep(uint32_t glort)
-{
-	uint32_t pep;
-
-	if (glort < GLORT_MIN || glort > GLORT_MAX)
-		return -EINVAL;
-
-	pep = (glort & GLORT_PEP_MASK) >> GLORT_PEP_SHIFT;
-
-	return (pep > GLORT_PEP_MAX) ? -EINVAL : (int)pep;
-}
-
-/*
- * pci_to_pep() - convert a PCI address to a PEP number
- * @bus: the pci bus
- * @device: the pci device
- * @function: the pci function
- *
- * The PEP number is read from the Vital Product Data (VPD)
- * file stored in the device's pci sysfs directory.
- *
- * The PCI domain is hardcoded to 0 for now.
- *
- * The PCI device and functions are hardcoded to 0 because the VPD
- * file is only present for the physical function, which is device 0,
- * function 0.
- *
- * Return: PEP number on success, or a negative error code.
- */
-#define PCI_PATH_BASE "/sys/bus/pci/devices"
-#define PCI_DEV_FMT "0000:%02" PRIx8 ":00.0"
-#define PCI_VPD "vpd"
-static int pci_to_pep(uint8_t bus)
-{
-	char fname[PATH_MAX];
-	uint32_t buf[BUFSIZ];
-	FILE *f;
-	size_t n;
-	int err;
-
-	/* read Vital Product Data from sysfs pci device file */
-	err = snprintf(fname, sizeof(fname),
-		       PCI_PATH_BASE "/" PCI_DEV_FMT "/" PCI_VPD, bus);
-
-	if (err < 0 || err >= (int)sizeof(fname))
-		return -ENOMEM;
-
-	f = fopen(fname, "r");
-	if (!f) {
-		MAT_LOG(ERR, "Error: Cannot open %s\n", fname);
-		return -errno;
-	}
-
-	n = fread(buf, sizeof(uint32_t), 8, f);
-	if (n != 8) {
-		MAT_LOG(ERR, "Error: Cannot read %s\n", fname);
-		fclose(f);
-		return -errno;
-	}
-
-	fclose(f);
-
-	/* pep index is stored in bits 12:9 of the sixth dword in the vpd */
-	return (int)((buf[5] & 0xf00) >> 8);
-}
-
-/*
- * pci_to_lport() - convert a PCI address to a logical port number
- * @bus: the pci bus number
- * @device: the pci device number
- * @function: the pci function number. This will be 0 for the physical
- *            function or non-zero corresponding to the vf number.
- *
- * Return: The logical port number on success, or a negative error on failure
- */
-int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function)
-{
-	fm_status err;
-	fm_int nEntries = 0;
-	fm_macAddressEntry *entries = NULL;
-	int pep;
-	int i;
-
-	pep = pci_to_pep(bus);
-	if (pep < 0)
-		return -EINVAL;
-
-	err = fmGetAddressTableExt(sw, &nEntries, NULL, 0);
-	if (err)
-		return cleanup(__func__, err);
-
-	if (nEntries == 0)
-		return -ENOENT;
-
-	entries = malloc(sizeof(*entries) * (size_t)nEntries);
-	if (!entries)
-		return -ENOMEM;
-
-	err = fmGetAddressTableExt(sw, &nEntries, entries, nEntries);
-	if (err) {
-		free(entries);
-		return cleanup(__func__, err);
-	}
-
-	for (i = 0; i < nEntries; ++i) {
-		uint32_t glort = 0;
-		int entry_pep = 0;
-		int entry_dev = 0;
-		int entry_pfvf = 0;
-		int port = entries[i].port;
-
-		err = fmGetStackGlort(sw, port, &glort);
-		if (err) {
-			free(entries);
-			return cleanup(__func__, err);
-		}
-
-		entry_pep = glort_to_pep(glort);
-		entry_pfvf = glort_to_pfvf(glort);
-		if (entry_pep < 0 || entry_pfvf < 0)
-			continue;
-
-		/* There are up to 8 functions per PCI device. If
-		 * there are more than 7 VFs created, the device
-		 * will be incremented, and the function numbering
-		 * will restart from 0 */
-		entry_dev = (int)((uint32_t)entry_pfvf >> 3);
-		entry_pfvf = (int)((uint32_t)entry_pfvf & 0x7);
-
-		if (pep == entry_pep && device == entry_dev &&
-		    function == entry_pfvf) {
-			free(entries);
-			return port;
-		}
-	}
-
-	free(entries);
-	return -ENOENT;
-}
-
 int
 switch_add_mac_entry(struct net_mat_field_ref *matches,
 		     struct net_mat_action *actions)
@@ -1547,9 +1427,7 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	bool mac_found = false;
 	bool lport_found = false;
 	bool vsi_found = false;
-	uint8_t bus;
-	uint8_t device;
-	uint8_t function;
+	struct net_mat_port_pci pci;
 	int lport = -1;
 	__u32 group;
 	int i;
@@ -1575,9 +1453,10 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	for (i = 0; actions && actions[i].uid; i++) {
 		switch(actions[i].uid) {
 		case ACTION_FORWARD_VSI:
-			bus = actions[i].args[0].v.value_u8;
-			device = actions[i].args[1].v.value_u8;
-			function = actions[i].args[2].v.value_u8;
+			memset(&pci, 0, sizeof(pci));
+			pci.bus = actions[i].args[0].v.value_u8;
+			pci.device = actions[i].args[1].v.value_u8;
+			pci.function = actions[i].args[2].v.value_u8;
 			vsi_found = true;
 			break;
 		case ACTION_SET_EGRESS_PORT:
@@ -1621,8 +1500,8 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	}
 
 	if (vsi_found) {
-		lport = pci_to_lport(bus, device, function);
-		if (lport < 0) {
+		err = ies_port_get_lport(&pci, (unsigned int *)&lport);
+		if (err) {
 			MAT_LOG(ERR, "Error: pci to log port\n");
 			return -EINVAL;
 		}
@@ -2310,6 +2189,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 	__u8 si_mask;
 	/* nsh service index appears 15B following UDP header */
 	const int si_off = 15;
+	struct net_mat_port_pci pci;
 	__u32 group_id;
 #ifdef VXLAN_MCAST
 	struct my_mcast_listener mcast_listeners[MAX_LISTENERS_PER_GROUP];
@@ -2519,11 +2399,15 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 		switch(actions[i].uid) {
 		case ACTION_FORWARD_VSI:
 			act |= FM_FLOW_ACTION_FORWARD;
-			param.logicalPort = pci_to_lport(
-					actions[i].args[0].v.value_u8,
-					actions[i].args[1].v.value_u8,
-					actions[i].args[2].v.value_u8);
-			if (param.logicalPort < 0) {
+
+			memset(&pci, 0, sizeof(pci));
+			pci.bus = actions[i].args[0].v.value_u8;
+			pci.device = actions[i].args[1].v.value_u8;
+			pci.function = actions[i].args[2].v.value_u8;
+
+			err = ies_port_get_lport(&pci,
+			                         (__u32 *)&param.logicalPort);
+			if (err) {
 				MAT_LOG(ERR, "Error: pci to log port\n");
 				err = -EINVAL;
 				break;
