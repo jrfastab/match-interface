@@ -2288,53 +2288,59 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (argc > 2) {
-
-		/* argv[args] can be NULL if no CMD is provided */
-		if (!argv[args]) {
-			fprintf(stderr, "Error parsing command\n");
+	if (!pid) {
+		pid = match_pid_lookup();
+		if (!pid) {
+			fprintf(stderr, "pid lookup failed and not specified\n");
 			match_usage();
 			exit(-1);
 		}
+	}
 
-		if (strcmp(argv[args], "get_tables") == 0) {
-			cmd = NET_MAT_TABLE_CMD_GET_TABLES;
-		} else if (strcmp(argv[args], "get_headers") == 0) {
-			resolve_names = false;
-			cmd = NET_MAT_TABLE_CMD_GET_HEADERS;
-		} else if (strcmp(argv[args], "get_header_graph") == 0) {
-			cmd = NET_MAT_TABLE_CMD_GET_HDR_GRAPH;
-		} else if (strcmp(argv[args], "get_actions") == 0) {
-			resolve_names = false;
-			cmd = NET_MAT_TABLE_CMD_GET_ACTIONS;
-		} else if (strcmp(argv[args], "get_graph") == 0) {
-			cmd = NET_MAT_TABLE_CMD_GET_TABLE_GRAPH;
-		} else if (strcmp(argv[args], "get_rules") == 0) {
-			cmd = NET_MAT_TABLE_CMD_GET_RULES;
-			if (args + 1 >= argc) {
-				get_rules_usage();
-				return -1;
-			}
-		} else if (strcmp(argv[args], "set_rule") == 0) {
-			cmd = NET_MAT_TABLE_CMD_SET_RULES;
-		} else if (strcmp(argv[args], "del_rule") == 0) {
-			cmd = NET_MAT_TABLE_CMD_DEL_RULES;
-		} else if (strcmp(argv[args], "create") == 0) {
-			cmd = NET_MAT_TABLE_CMD_CREATE_TABLE;
-		} else if (strcmp(argv[args], "destroy") == 0) {
-			cmd = NET_MAT_TABLE_CMD_DESTROY_TABLE;
-		} else if (strcmp(argv[args], "update") == 0) {
-			cmd = NET_MAT_TABLE_CMD_UPDATE_TABLE;
-		} else if (strcmp(argv[args], "lport_lookup") == 0) {
-			cmd = NET_MAT_PORT_CMD_GET_LPORT;
-		} else if (strcmp(argv[args], "get_ports") == 0) {
-			cmd = NET_MAT_PORT_CMD_GET_PORTS;
-		} else if (strcmp(argv[args], "set_port") == 0) {
-			cmd = NET_MAT_PORT_CMD_SET_PORTS;
-		} else {
-			match_usage();
-			return 0;
+	/* argv[args] can be NULL if no CMD is provided */
+	if (!argv[args]) {
+		fprintf(stderr, "Error parsing command\n");
+		match_usage();
+		exit(-1);
+	}
+
+	if (strcmp(argv[args], "get_tables") == 0) {
+		cmd = NET_MAT_TABLE_CMD_GET_TABLES;
+	} else if (strcmp(argv[args], "get_headers") == 0) {
+		resolve_names = false;
+		cmd = NET_MAT_TABLE_CMD_GET_HEADERS;
+	} else if (strcmp(argv[args], "get_header_graph") == 0) {
+		cmd = NET_MAT_TABLE_CMD_GET_HDR_GRAPH;
+	} else if (strcmp(argv[args], "get_actions") == 0) {
+		resolve_names = false;
+		cmd = NET_MAT_TABLE_CMD_GET_ACTIONS;
+	} else if (strcmp(argv[args], "get_graph") == 0) {
+		cmd = NET_MAT_TABLE_CMD_GET_TABLE_GRAPH;
+	} else if (strcmp(argv[args], "get_rules") == 0) {
+		cmd = NET_MAT_TABLE_CMD_GET_RULES;
+		if (args + 1 >= argc) {
+			get_rules_usage();
+			return -1;
 		}
+	} else if (strcmp(argv[args], "set_rule") == 0) {
+		cmd = NET_MAT_TABLE_CMD_SET_RULES;
+	} else if (strcmp(argv[args], "del_rule") == 0) {
+		cmd = NET_MAT_TABLE_CMD_DEL_RULES;
+	} else if (strcmp(argv[args], "create") == 0) {
+		cmd = NET_MAT_TABLE_CMD_CREATE_TABLE;
+	} else if (strcmp(argv[args], "destroy") == 0) {
+		cmd = NET_MAT_TABLE_CMD_DESTROY_TABLE;
+	} else if (strcmp(argv[args], "update") == 0) {
+		cmd = NET_MAT_TABLE_CMD_UPDATE_TABLE;
+	} else if (strcmp(argv[args], "lport_lookup") == 0) {
+		cmd = NET_MAT_PORT_CMD_GET_LPORT;
+	} else if (strcmp(argv[args], "get_ports") == 0) {
+		cmd = NET_MAT_PORT_CMD_GET_PORTS;
+	} else if (strcmp(argv[args], "set_port") == 0) {
+		cmd = NET_MAT_PORT_CMD_SET_PORTS;
+	} else {
+		match_usage();
+		return 0;
 	}
 
 	/* Build cache to translate netdev's to names */
