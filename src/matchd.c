@@ -120,10 +120,16 @@ static int matchd_create_pid(void)
 	return 0;
 }
 
-static void matchd_int_handler(int sig __unused) {
+static void matchd_int_handler(int sig __unused)
+{
 	MAT_LOG(DEBUG, "\nmatchd exiting...\n");
 
 	matchd_uninit();
+
+	if (remove(MATCHLIB_PID_FILE)) {
+		MAT_LOG(ERR, "Cannot remove %s, exiting anyway\n",
+		        MATCHLIB_PID_FILE);
+	}
 
 	exit(0);
 }
