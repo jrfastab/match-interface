@@ -1911,6 +1911,8 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	int ret, err;
 	uint32_t min = 0, max = 0;
 
+	memset(&port, 0, sizeof(port));
+
 	opterr = 0;
 	while (argc > 0) {
 		if (strcmp(*argv, "pci") == 0) {
