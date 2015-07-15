@@ -8,7 +8,7 @@ matchd \- Process netlink MATCH commands
 .\" Options, brief
 .SH SYNOPSIS
 .nf
-\fImatchd\fR \-f <family> [\-b <backend>] [-h] [-l] [-s]
+\fImatchd\fR [\-f <family>] [\-b <backend>] [\-h] [\-l] [\-s] [\-v] [\-vv]
 .fi
 
 .\" Detailed description
@@ -31,7 +31,7 @@ The name of the backend to use.
 .RE
 
 .br
-\-l <ifname>
+\-l
 .RS 4
 List available backends and exit.
 .RE
@@ -40,4 +40,16 @@ List available backends and exit.
 \-s
 .RS 4
 Add all switch ports to a single default vlan.
+.RE
+
+.br
+\-v
+.RS 4
+Be verbose.
+.RE
+
+.br
+\-vv
+.RS 4
+Be very verbose.
 .RE
