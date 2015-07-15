@@ -294,6 +294,14 @@ void match_push_actions(struct net_mat_action **a)
 		actions[a[i]->uid] = a[i];
 }
 
+void match_push_actions_ary(struct net_mat_action *a)
+{
+	unsigned int i;
+
+	for (i = 0; a[i].uid; i++)
+		actions[a[i].uid] = &a[i];
+}
+
 void match_push_tables(struct net_mat_tbl **t)
 {
 	unsigned int i;
@@ -1178,16 +1186,15 @@ match_get_action_arg(struct net_mat_action_arg *arg, struct nlattr *nl)
 }
 
 int match_get_action(FILE *fp, int print, struct nlattr *nl,
-		struct net_mat_action *a)
+		     struct net_mat_action *a)
 {
 	int rem;
 	struct nlattr *signature, *l;
 	struct nlattr *action[NET_MAT_ACTION_ATTR_MAX+1];
 	struct net_mat_action *act = NULL;
 	int err = 0;
-	unsigned int uid, count = 0;
+	unsigned int count = 0;
 	char *name;
-	bool act_alloc = false;
 
 	err = nla_parse_nested(action, NET_MAT_ACTION_ATTR_MAX, nl,
 			       net_mat_action_policy);
@@ -1200,31 +1207,27 @@ int match_get_action(FILE *fp, int print, struct nlattr *nl,
 	if (!action[NET_MAT_ACTION_ATTR_UID])
 		goto out;
 
-	uid = nla_get_u32(action[NET_MAT_ACTION_ATTR_UID]);
-	act = actions[uid]; /* TBD review error paths */
-	if (!act) {
+	if (a) {
+		act = a;
+	} else {
 		act = calloc(1, sizeof(struct net_mat_action));
 		if (!act) {
 			err = -ENOMEM;
 			goto out;
 		}
-		act_alloc = true;
 	}
 
+	act->uid = nla_get_u32(action[NET_MAT_ACTION_ATTR_UID]);
 	if (action[NET_MAT_ACTION_ATTR_NAME]) {
-		act->uid = uid;
 		name = nla_get_string(action[NET_MAT_ACTION_ATTR_NAME]);
 		act->name = strdup(name);
 		if (!act->name) {
 			err = -ENOMEM;
 			goto out;
 		}
-	} else if (act && act->uid) {
-		name = act->name;
 	} else {
-		name = none;
+		act->name = strdup(none);
 	}
-
 
 	if (!action[NET_MAT_ACTION_ATTR_SIGNATURE])
 		goto done;
@@ -1253,24 +1256,19 @@ int match_get_action(FILE *fp, int print, struct nlattr *nl,
 	}
 
 done:
-	if (a) {
-		a->uid = act->uid;
-		a->name = strdup(act->name);
-		if (!a->name) {
-			err = -ENOMEM;
-			goto out;
-		}
-		a->args = act->args;
-	}
-	actions[uid] = act;
 	pp_action(fp, print, act, false);
-	return err;
-
-out:
-	if (act_alloc) {
+	if (!a) {
 		free(act->args);
 		free(act->name);
 		free(act);
+	}
+	return err;
+out:
+	if (act) {
+		free(act->args);
+		free(act->name);
+		if (!a)
+			free(act);
 	}
 	return err;
 }

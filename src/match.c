@@ -369,8 +369,12 @@ static void match_cmd_get_actions(struct match_msg *msg, int verbose)
 	if (match_nl_table_cmd_to_type(stdout, false, NET_MAT_ACTIONS, tb))
 		return;
 
-	if (tb[NET_MAT_ACTIONS])
-		match_get_actions(stdout, verbose, tb[NET_MAT_ACTIONS], NULL);
+	if (tb[NET_MAT_ACTIONS]) {
+		struct net_mat_action *a;
+
+		match_get_actions(stdout, verbose, tb[NET_MAT_ACTIONS], &a);
+		match_push_actions_ary(a);
+	}
 }
 
 static void match_cmd_get_headers_graph(struct match_msg *msg, int verbose)

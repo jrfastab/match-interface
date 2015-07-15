@@ -97,6 +97,7 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p);
 
 void match_push_headers(struct net_mat_hdr **h);
 void match_push_actions(struct net_mat_action **a);
+void match_push_actions_ary(struct net_mat_action *a);
 void match_push_tables(struct net_mat_tbl **t);
 void match_push_tables_a(struct net_mat_tbl *t);
 void match_push_header_fields(struct net_mat_hdr **h);
