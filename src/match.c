@@ -905,7 +905,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 	action->args = calloc(reqs_args + 1,
 			sizeof(struct net_mat_action_arg));
 	if (!action->args) {
-		fprintf(stderr, "Error: missing action arg\n");
+		fprintf(stderr, "Error: action args calloc failure\n");
 		free(action->name);
 		return -1;
 	}
