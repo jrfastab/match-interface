@@ -1087,7 +1087,7 @@ match_destroy_tbl_send(int verbose, uint32_t pid, int family,
 				return -EINVAL;
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			destroy_usage();
 			exit(-1);
 		}
@@ -1427,7 +1427,7 @@ match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			if (cmd == NET_MAT_TABLE_CMD_CREATE_TABLE)
 				create_usage();
 			else
@@ -1584,7 +1584,7 @@ rule_del_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			del_rule_usage();
 			exit(-1);
 		}
@@ -1693,7 +1693,7 @@ rule_get_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			get_rules_usage();
 			exit(-1);
 		}
@@ -1861,7 +1861,7 @@ rule_set_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			set_rule_usage();
 			exit(-1);
 		}
@@ -1992,7 +1992,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			if (cmd == NET_MAT_PORT_CMD_GET_LPORT)
 				get_lport_usage();
 			else
@@ -2158,7 +2158,7 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			set_port_usage();
 			exit(-1);
 		}
