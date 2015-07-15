@@ -1,0 +1,62 @@
+.\" Header and footer
+.TH "MATCH\-GET_PORTS" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-get_ports \- Display port information and statistics
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch get_ports\fR [\-f <family>] [\-p <pid>] [\-g] [\-h] [\-i ifname] [\-s]
+               [min <min>] [max <max>]
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Display a range of ports' attributes and statistics.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MATCH daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the MATCH daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+min <min>
+.RS 4
+The minimum port id in a range of port ids.
+.RE
+
+.br
+max <max>
+.RS 4
+The maximum port id in a range of port ids.
+.RE

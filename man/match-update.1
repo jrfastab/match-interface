@@ -1,0 +1,66 @@
+.\" Header and footer
+.TH "MATCH\-UPDATE" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-update \- Update a match action table attribute
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch update\fR [\-f <family>] [\-p <pid>] [\-g] [\-h] [\-i ifname] [\-s]
+            id <id> [attrib <ATTRIB> [<ATTRIB_VALUE>...]...]
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Send a command instructing a match action table (MAT) daemon to update a match action table's attributes.
+.sp
+Tables can have attributes, such as tunnel MAC addresses, which influence how packets are handled by the table. This command can be used to modify the values of the attributes.
+.sp
+The options are not positional, but the keyword to describe the option, e.g. "attrib", is required.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MAT daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the MATCH daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+id <id>
+.RS 4
+The id of the table being updated.
+.RE
+
+.br
+attrib <ATTRIB> [ATTRIB_VALUE...]
+.RS 4
+The attribute name to update and new value to apply.
+.RE
