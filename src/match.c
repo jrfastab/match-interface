@@ -919,7 +919,9 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		}
 
 		if (*argv == NULL) {
-			fprintf(stderr, "Error: missing action arg\n");
+			fprintf(stderr, "Error: missing action arg. expected `%s %s`\n",
+				net_mat_action_arg_type_str(action->args[i].type),
+				action->args[i].name);
 			return -EINVAL;
 		}
 
