@@ -2742,7 +2742,9 @@ int match_put_ports(struct nl_msg *nlbuf,
 	if (!ports)
 		return -EMSGSIZE;
 
-	for (i = 0; p[i].port_id > 0; i++) {
+	/* sometimes the pci bus is sent down instead of port id so
+	 * we need to check for both. */
+	for (i = 0; p[i].port_id > 0 || p[i].pci.bus > 0; i++) {
 		port = nla_nest_start(nlbuf, NET_MAT_PORT);
 		if (!port)
 			return -EMSGSIZE;
