@@ -871,9 +871,11 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		   struct net_mat_action *action)
 {
 	struct net_mat_action *a;
-	unsigned int i, reqs_args = 0;
+	unsigned int i, num_args = 0, reqs_args = 0;
 	int err = 0, advance = 0;
+	__u32 type = 0;
 	char *has_dots;
+	bool variadic = false;
 
 	next_arg();
 	advance++;
@@ -894,38 +896,60 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		fprintf(stderr, "Error: missing actions\n");
 		return -EINVAL;
 	}
-	for (i = 0; a->args && a->args[i].type; i++)
+	for (i = 0; a->args && a->args[i].type != NET_MAT_ACTION_ARG_TYPE_UNSPEC; i++)
 		reqs_args++;
 
-	action->name = strdup(a->name);
 	action->uid = a->uid;
 	if (!reqs_args || !need_args)
 		goto done;
 
-	action->args = calloc(reqs_args + 1,
+	advance++;
+	next_arg();
+
+	/* If the type of argument is variadic then we need to consume all
+	 * remaining arguments on the command line. This is possible because
+	 * variadic actions are always specified last.
+	 * Also note we need to be careful to reset argv pointer after we
+	 * count the arguments so that we can then parse them below, see
+	 * old, argv handling in the if block here.
+	 */
+	if (a->args[reqs_args-1].type == NET_MAT_ACTION_ARG_TYPE_VARIADIC) {
+		char **old = argv;
+
+		variadic = true;
+
+		while (*argv) {
+			num_args++;
+			next_arg();
+		}
+		argv = old;
+	} else {
+		num_args = reqs_args;
+	}
+
+	action->args = calloc(num_args + 1,
 			sizeof(struct net_mat_action_arg));
 	if (!action->args) {
 		fprintf(stderr, "Error: action args calloc failure\n");
 		free(action->name);
 		return -1;
 	}
-	for (i = 0; i < reqs_args; i++) {
-		action->args[i].name = strdup(a->args[i].name);
-		action->args[i].type = a->args[i].type;
 
-		if (a->args[i].type) {
-			next_arg();
-			advance++;
-		}
+	for (i = 0; i < num_args; i++) {
+		if (i < reqs_args &&
+		    a->args[i].type != NET_MAT_ACTION_ARG_TYPE_VARIADIC)
+			type = a->args[i].type;
 
-		if (*argv == NULL) {
+		if (*argv == NULL && !variadic) {
 			fprintf(stderr, "Error: missing action arg. expected `%s %s`\n",
 				net_mat_action_arg_type_str(action->args[i].type),
 				action->args[i].name);
 			return -EINVAL;
 		}
 
-		switch (a->args[i].type) {
+		action->args[i].type = type;
+
+		switch (type) {
 		case NET_MAT_ACTION_ARG_TYPE_U8:
 			err = sscanf(*argv, "0x%" SCNx8 "",
 					&action->args[i].v.value_u8);
@@ -943,7 +967,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		case NET_MAT_ACTION_ARG_TYPE_U32:
 			has_dots = strtok(*argv, " ");
 			if (!has_dots) {
-				fprintf(stderr, "Invalid u32 bit value\n");
+				fprintf(stderr, "Invalid u32 bit value %s\n", *argv);
 				return -EINVAL;
 			}
 			if (strchr(has_dots, '.')) {
@@ -989,6 +1013,9 @@ int get_action_arg(int argc, char **argv, bool need_args,
 
 		if (err != 1)
 			return -EINVAL;
+
+		next_arg();
+		advance++;
 	}
 
 done:

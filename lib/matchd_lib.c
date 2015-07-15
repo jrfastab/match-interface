@@ -736,10 +736,13 @@ match_is_valid_action_arg(struct net_mat_action *a,
 			fixed = a->args[i-1].type;
 		}
 
-		if (fixed && a->args[i].type != fixed)
-			goto done;
-		else if (a->args[i].type != args[i].type)
-			goto done;
+		if (fixed) {
+			if (args[i].type != fixed)
+				goto done;
+		} else {
+			if (a->args[i].type != args[i].type)
+				goto done;
+		}
 	}
 
 	/* Cannot have more arguments than the action expects. */
