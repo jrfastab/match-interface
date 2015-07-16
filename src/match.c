@@ -248,10 +248,11 @@ static void get_port_usage(void)
 
 static void set_port_usage(void)
 {
-	printf("Usage: %s set_port port NUM [speed NUM] [state NUM] [max_frame_size NUM]\n", progname);
+	printf("Usage: %s set_port port NUM [speed NUM] [state NUM] [max_frame_size NUM] [def_vlan NUM]\n", progname);
 	printf(" state: up down\n"); 
 	printf(" speed: integer speed\n");
 	printf(" max_frame_size: integer maximum frame size\n");
+	printf(" def_vlan: integer port's default VLAN (1 - 4095)\n");
 }
 
 static struct nla_policy match_get_tables_policy[NET_MAT_MAX+1] = {
@@ -2121,6 +2122,26 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				port.state = NET_MAT_PORT_T_STATE_DOWN;
 			} else {
 				fprintf(stderr, "Error: invalid state\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+		} else if (strcmp(*argv, "def_vlan") == 0) {
+			next_arg();
+			if (*argv == NULL) {
+				fprintf(stderr, "Error: missing vlan\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+
+			err = sscanf(*argv, "%u", &port.vlan.def_vlan);
+			if (err < 1) {
+				fprintf(stderr, "Error: vlan invalid\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+
+			if (port.vlan.def_vlan < 1 || port.vlan.def_vlan > 4095) {
+				fprintf(stderr, "Error: default VLAN must be in range [1..4095]\n");
 				set_port_usage();
 				return -EINVAL;
 			}

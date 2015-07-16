@@ -445,6 +445,7 @@ static struct nla_policy net_mat_port_policy[NET_MAT_PORT_T_MAX+1] = {
 	[NET_MAT_PORT_T_STATE]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_SPEED]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_MAX_FRAME_SIZE]	= { .type = NLA_U32, },
+	[NET_MAT_PORT_T_VLAN]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_PCI]   = { .type = NLA_UNSPEC, .minlen = sizeof(struct net_mat_port_pci)},
 };
 
@@ -456,6 +457,10 @@ static struct nla_policy net_mat_port_stats_policy[NET_MAT_PORT_T_STATS_MAX+1] =
 static struct nla_policy net_mat_port_stats_rxtx_policy[NET_MAT_PORT_T_STATS_RXTX_MAX+1] = {
        [NET_MAT_PORT_T_STATS_BYTES] = { .type = NLA_U64, },
        [NET_MAT_PORT_T_STATS_PACKETS] = { .type = NLA_U64, },
+};
+
+static struct nla_policy net_mat_port_vlan_policy[NET_MAT_PORT_T_VLAN_MAX+1] = {
+	[NET_MAT_PORT_T_VLAN_DEF_VLAN] = { .type = NLA_U32, },
 };
 
 static char *
@@ -786,6 +791,12 @@ static void pp_port_stats(FILE *fp, int print, struct net_mat_port_stats *s)
 	pfprintf(fp, print, "        tx_packets %" PRIu64 "\n", s->tx_packets);
 }
 
+static void pp_port_vlan(FILE *fp, int print, struct net_mat_port_vlan *v)
+{
+	pfprintf(fp, print, "    vlan:\n");
+	pfprintf(fp, print, "        default vlan: %u\n", v->def_vlan);
+}
+
 void pp_port(FILE *fp, int print,
 	     struct net_mat_port *port)
 {
@@ -801,6 +812,8 @@ void pp_port(FILE *fp, int print,
 		pfprintf(fp, print, "    pci: (%x:%x.%x)\n",
 			 port->pci.bus, port->pci.device, port->pci.function);
 	}
+
+	pp_port_vlan(fp, print, &port->vlan);
 
 	pp_port_stats(fp, print, &port->stats);
 }
@@ -2039,6 +2052,25 @@ static int match_get_port_stats(FILE *fp __unused, int print __unused,
 	return 0;
 }
 
+static int match_get_port_vlan(FILE *fp __unused, int print __unused,
+			       struct nlattr *nlattr,
+			       struct net_mat_port_vlan *vlan)
+{
+	struct nlattr *p[NET_MAT_PORT_T_VLAN_MAX + 1];
+	int err;
+
+	err = nla_parse_nested(p, NET_MAT_PORT_T_VLAN_MAX, nlattr, net_mat_port_vlan_policy);
+	if (err) {
+		MAT_LOG(ERR, "Warning parse error on port vlan, abort parse\n");
+		return err;
+	}
+
+	if (p[NET_MAT_PORT_T_VLAN_DEF_VLAN])
+		vlan->def_vlan = nla_get_u32(p[NET_MAT_PORT_T_VLAN_DEF_VLAN]);
+
+	return 0;
+}
+
 int match_get_port(FILE *fp, int print, struct nlattr *nlattr,
 		 struct net_mat_port *port)
 {
@@ -2079,6 +2111,12 @@ int match_get_port(FILE *fp, int print, struct nlattr *nlattr,
 
 	if (p[NET_MAT_PORT_T_STATS]) {
 		err = match_get_port_stats(fp, print, p[NET_MAT_PORT_T_STATS], &port->stats);
+		if (err)
+			return -EINVAL;
+	}
+
+	if (p[NET_MAT_PORT_T_VLAN]) {
+		err = match_get_port_vlan(fp, print, p[NET_MAT_PORT_T_VLAN], &port->vlan);
 		if (err)
 			return -EINVAL;
 	}
@@ -2729,6 +2767,16 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p)
 	nla_nest_end(nlbuf, rx_stats);
 
 	nla_nest_end(nlbuf, stats);
+
+	stats = nla_nest_start(nlbuf, NET_MAT_PORT_T_VLAN);
+	if (!stats)
+		return -EMSGSIZE;
+
+	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_VLAN_DEF_VLAN, p->vlan.def_vlan))
+		return -EMSGSIZE;
+
+	nla_nest_end(nlbuf, stats);
+
 	return err;
 }
 

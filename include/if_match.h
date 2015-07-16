@@ -273,6 +273,10 @@ struct net_mat_port_stats {
 	uint64_t tx_packets;
 };
 
+struct net_mat_port_vlan {
+	__u32 def_vlan;
+};
+
 enum {
 	NET_MAT_FIELD_UNSPEC,
 	NET_MAT_FIELD,
@@ -572,6 +576,13 @@ enum {
 #define NET_MAT_PORT_T_STATS_MAX (__NET_MAT_PORT_T_STATS_MAX - 1)
 
 enum {
+	NET_MAT_PORT_T_VLAN_UNSPEC,
+	NET_MAT_PORT_T_VLAN_DEF_VLAN,
+	__NET_MAT_PORT_T_VLAN_MAX,
+};
+#define NET_MAT_PORT_T_VLAN_MAX (__NET_MAT_PORT_T_VLAN_MAX - 1)
+
+enum {
 	NET_MAT_PORT_T_TYPE_UNSPEC,
 	NET_MAT_PORT_T_TYPE_NETWORK,
 	NET_MAT_PORT_T_TYPE_HOST,
@@ -649,6 +660,7 @@ enum {
 	NET_MAT_PORT_T_PCI,
 	NET_MAT_PORT_T_STATS,
 	NET_MAT_PORT_T_MAX_FRAME_SIZE,
+	NET_MAT_PORT_T_VLAN,
 	__NET_MAT_PORT_T_MAX,
 };
 #define NET_MAT_PORT_T_MAX (__NET_MAT_PORT_T_MAX - 1)
@@ -670,6 +682,7 @@ struct net_mat_port {
 	__u32 max_frame_size;
 	struct net_mat_port_pci pci;
 	struct net_mat_port_stats stats;
+	struct net_mat_port_vlan vlan;
 };
 
 enum {

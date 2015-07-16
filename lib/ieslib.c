@@ -601,6 +601,13 @@ static int ies_ports_get(struct net_mat_port **ports)
 			break;
 		}
 
+		err = fmGetPortAttribute(sw, port, FM_PORT_DEF_VLAN,
+					 &p[i].vlan.def_vlan);
+		if (err != FM_OK) {
+			cleanup("fmGetPortAttribute()", err);
+			continue;
+		}
+
 		p[i].port_id = (__u32)cpi;
 		i++;
 	}
@@ -680,6 +687,15 @@ static int ies_ports_set(struct net_mat_port *ports)
 			                         &p->max_frame_size);
 			if (err) {
 				MAT_LOG(ERR, "Error: SetPortAttribute FM_PORT_MAX_FRAME_SIZE failed!\n");
+				return -EINVAL;
+			}
+		}
+
+		if (p->vlan.def_vlan) {
+			err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN,
+			                         &p->vlan.def_vlan);
+			if (err) {
+				MAT_LOG(ERR, "Error: SetPortAttribute FM_PORT_DEF_VLAN failed!\n");
 				return -EINVAL;
 			}
 		}
