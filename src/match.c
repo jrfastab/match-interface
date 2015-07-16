@@ -370,8 +370,12 @@ static void match_cmd_get_actions(struct match_msg *msg, int verbose)
 	if (match_nl_table_cmd_to_type(stdout, false, NET_MAT_ACTIONS, tb))
 		return;
 
-	if (tb[NET_MAT_ACTIONS])
-		match_get_actions(stdout, verbose, tb[NET_MAT_ACTIONS], NULL);
+	if (tb[NET_MAT_ACTIONS]) {
+		struct net_mat_action *a;
+
+		match_get_actions(stdout, verbose, tb[NET_MAT_ACTIONS], &a);
+		match_push_actions_ary(a);
+	}
 }
 
 static void match_cmd_get_headers_graph(struct match_msg *msg, int verbose)
@@ -872,9 +876,11 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		   struct net_mat_action *action)
 {
 	struct net_mat_action *a;
-	unsigned int i, reqs_args = 0;
+	unsigned int i, num_args = 0, reqs_args = 0;
 	int err = 0, advance = 0;
+	__u32 type = 0;
 	char *has_dots;
+	bool variadic = false;
 
 	next_arg();
 	advance++;
@@ -895,36 +901,60 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		fprintf(stderr, "Error: missing actions\n");
 		return -EINVAL;
 	}
-	for (i = 0; a->args && a->args[i].type; i++)
+	for (i = 0; a->args && a->args[i].type != NET_MAT_ACTION_ARG_TYPE_UNSPEC; i++)
 		reqs_args++;
 
-	action->name = strdup(a->name);
 	action->uid = a->uid;
 	if (!reqs_args || !need_args)
 		goto done;
 
-	action->args = calloc(reqs_args + 1,
+	advance++;
+	next_arg();
+
+	/* If the type of argument is variadic then we need to consume all
+	 * remaining arguments on the command line. This is possible because
+	 * variadic actions are always specified last.
+	 * Also note we need to be careful to reset argv pointer after we
+	 * count the arguments so that we can then parse them below, see
+	 * old, argv handling in the if block here.
+	 */
+	if (a->args[reqs_args-1].type == NET_MAT_ACTION_ARG_TYPE_VARIADIC) {
+		char **old = argv;
+
+		variadic = true;
+
+		while (*argv) {
+			num_args++;
+			next_arg();
+		}
+		argv = old;
+	} else {
+		num_args = reqs_args;
+	}
+
+	action->args = calloc(num_args + 1,
 			sizeof(struct net_mat_action_arg));
 	if (!action->args) {
-		fprintf(stderr, "Error: missing action arg\n");
+		fprintf(stderr, "Error: action args calloc failure\n");
 		free(action->name);
 		return -1;
 	}
-	for (i = 0; i < reqs_args; i++) {
-		action->args[i].name = strdup(a->args[i].name);
-		action->args[i].type = a->args[i].type;
 
-		if (a->args[i].type) {
-			next_arg();
-			advance++;
-		}
+	for (i = 0; i < num_args; i++) {
+		if (i < reqs_args &&
+		    a->args[i].type != NET_MAT_ACTION_ARG_TYPE_VARIADIC)
+			type = a->args[i].type;
 
-		if (*argv == NULL) {
-			fprintf(stderr, "Error: missing action arg\n");
+		if (*argv == NULL && !variadic) {
+			fprintf(stderr, "Error: missing action arg. expected `%s %s`\n",
+				net_mat_action_arg_type_str(action->args[i].type),
+				action->args[i].name);
 			return -EINVAL;
 		}
 
-		switch (a->args[i].type) {
+		action->args[i].type = type;
+
+		switch (type) {
 		case NET_MAT_ACTION_ARG_TYPE_U8:
 			err = sscanf(*argv, "0x%" SCNx8 "",
 					&action->args[i].v.value_u8);
@@ -942,7 +972,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		case NET_MAT_ACTION_ARG_TYPE_U32:
 			has_dots = strtok(*argv, " ");
 			if (!has_dots) {
-				fprintf(stderr, "Invalid u32 bit value\n");
+				fprintf(stderr, "Invalid u32 bit value %s\n", *argv);
 				return -EINVAL;
 			}
 			if (strchr(has_dots, '.')) {
@@ -988,6 +1018,9 @@ int get_action_arg(int argc, char **argv, bool need_args,
 
 		if (err != 1)
 			return -EINVAL;
+
+		next_arg();
+		advance++;
 	}
 
 done:
@@ -1055,7 +1088,7 @@ match_destroy_tbl_send(int verbose, uint32_t pid, int family,
 				return -EINVAL;
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			destroy_usage();
 			exit(-1);
 		}
@@ -1395,7 +1428,7 @@ match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			if (cmd == NET_MAT_TABLE_CMD_CREATE_TABLE)
 				create_usage();
 			else
@@ -1552,7 +1585,7 @@ rule_del_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			del_rule_usage();
 			exit(-1);
 		}
@@ -1661,7 +1694,7 @@ rule_get_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			get_rules_usage();
 			exit(-1);
 		}
@@ -1829,7 +1862,7 @@ rule_set_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			set_rule_usage();
 			exit(-1);
 		}
@@ -1960,7 +1993,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				exit(-1);
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			if (cmd == NET_MAT_PORT_CMD_GET_LPORT)
 				get_lport_usage();
 			else
@@ -2146,7 +2179,7 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 		} else {
-			fprintf(stderr, "Error: unexpected argument\n");
+			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			set_port_usage();
 			exit(-1);
 		}

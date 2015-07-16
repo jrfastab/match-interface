@@ -75,6 +75,20 @@ enum net_mat_action_arg_type {
 	__NET_MAT_ACTION_ARG_TYPE_VAL_MAX,
 };
 
+static const char *__net_mat_action_arg_type_str[] =  {
+	[NET_MAT_ACTION_ARG_TYPE_UNSPEC]	= "unspec",
+	[NET_MAT_ACTION_ARG_TYPE_NULL]		= "null",
+	[NET_MAT_ACTION_ARG_TYPE_U8]		= "u8",
+	[NET_MAT_ACTION_ARG_TYPE_U16]		= "u16",
+	[NET_MAT_ACTION_ARG_TYPE_U32]		= "u32",
+	[NET_MAT_ACTION_ARG_TYPE_U64]		= "u64",
+	[NET_MAT_ACTION_ARG_TYPE_VARIADIC]	= "(variadic)",
+};
+
+static inline const char *net_mat_action_arg_type_str(__u32 i) {
+	return i < __NET_MAT_ACTION_ARG_TYPE_VAL_MAX ? __net_mat_action_arg_type_str[i] : "";
+}
+
 /**
  * @struct net_mat_action_arg
  * @brief encodes action arguments in structures one per argument
