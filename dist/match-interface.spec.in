@@ -89,8 +89,11 @@ The match tool that interacts with matchd.
 %files tools
 %{_sbindir}/match
 %{_mandir}/*
+%exclude %{_sbindir}/nl_get_attr_ex
 
 %changelog
+* Thu Jul 16 2015 Jef Oliver <jef.oliver@intel.com>
+- Update SPEC to ignore test program
 * Mon Jun 29 2015 Jef Oliver <jef.oliver@intel.com>
 - Update SPEC file to support match naming
 * Fri Jun 05 2015 Jef Oliver <jef.oliver@intel.com>
