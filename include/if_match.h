@@ -287,8 +287,28 @@ struct net_mat_port_stats {
 	uint64_t tx_packets;
 };
 
+enum flag_state {
+	NET_MAT_PORT_T_FLAG_UNSPEC,
+	NET_MAT_PORT_T_FLAG_ENABLED,
+	NET_MAT_PORT_T_FLAG_DISABLED,
+	__NET_MAT_PORT_T_FLAG_MAX,
+};
+#define NET_MAT_PORT_T_FLAG_MAX (__NET_MAT_PORT_T_FLAG_MAX - 1)
+
+static const char *__flag_state_str[] =
+{
+	[NET_MAT_PORT_T_FLAG_UNSPEC] =		"",
+	[NET_MAT_PORT_T_FLAG_ENABLED] =		"enabled",
+	[NET_MAT_PORT_T_FLAG_DISABLED] =	"disabled",
+};
+
+static inline const char *flag_state_str(__u32 i) {
+	return i < __NET_MAT_PORT_T_FLAG_MAX ? __flag_state_str[i] : "";
+}
+
 struct net_mat_port_vlan {
 	__u32 def_vlan;
+	enum flag_state drop_tagged;
 };
 
 enum {
@@ -592,6 +612,7 @@ enum {
 enum {
 	NET_MAT_PORT_T_VLAN_UNSPEC,
 	NET_MAT_PORT_T_VLAN_DEF_VLAN,
+	NET_MAT_PORT_T_VLAN_DROP_TAGGED,
 	__NET_MAT_PORT_T_VLAN_MAX,
 };
 #define NET_MAT_PORT_T_VLAN_MAX (__NET_MAT_PORT_T_VLAN_MAX - 1)

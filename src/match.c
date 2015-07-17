@@ -248,11 +248,12 @@ static void get_port_usage(void)
 
 static void set_port_usage(void)
 {
-	printf("Usage: %s set_port port NUM [speed NUM] [state NUM] [max_frame_size NUM] [def_vlan NUM]\n", progname);
+	printf("Usage: %s set_port port NUM [speed NUM] [state NUM] [max_frame_size NUM] [def_vlan NUM] [drop_tagged VAL]\n", progname);
 	printf(" state: up down\n"); 
 	printf(" speed: integer speed\n");
 	printf(" max_frame_size: integer maximum frame size\n");
 	printf(" def_vlan: integer port's default VLAN (1 - 4095)\n");
+	printf(" drop_tagged: dropping tagged frames on ingress (enabled/disabled)\n");
 }
 
 static struct nla_policy match_get_tables_policy[NET_MAT_MAX+1] = {
@@ -2190,6 +2191,23 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 
 			if (port.vlan.def_vlan < 1 || port.vlan.def_vlan > 4095) {
 				fprintf(stderr, "Error: default VLAN must be in range [1..4095]\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+		} else if (strcmp(*argv, "drop_tagged") == 0) {
+			next_arg();
+			if (*argv == NULL) {
+				fprintf(stderr, "Error: missing priority\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+
+			if (strcmp(*argv, flag_state_str(NET_MAT_PORT_T_FLAG_ENABLED)) == 0) {
+				port.vlan.drop_tagged = NET_MAT_PORT_T_FLAG_ENABLED;
+			} else if (strcmp(*argv, flag_state_str(NET_MAT_PORT_T_FLAG_DISABLED)) == 0) {
+				port.vlan.drop_tagged = NET_MAT_PORT_T_FLAG_DISABLED;
+			} else {
+				fprintf(stderr, "Error: invalid drop_tagged state\n");
 				set_port_usage();
 				return -EINVAL;
 			}

@@ -469,6 +469,7 @@ static struct nla_policy net_mat_port_stats_rxtx_policy[NET_MAT_PORT_T_STATS_RXT
 
 static struct nla_policy net_mat_port_vlan_policy[NET_MAT_PORT_T_VLAN_MAX+1] = {
 	[NET_MAT_PORT_T_VLAN_DEF_VLAN] = { .type = NLA_U32, },
+	[NET_MAT_PORT_T_VLAN_DROP_TAGGED] = { .type = NLA_U32, },
 };
 
 static char *
@@ -803,6 +804,8 @@ static void pp_port_vlan(FILE *fp, int print, struct net_mat_port_vlan *v)
 {
 	pfprintf(fp, print, "    vlan:\n");
 	pfprintf(fp, print, "        default vlan: %u\n", v->def_vlan);
+	if (v->drop_tagged)
+		pfprintf(fp, print, "        drop tagged: %s\n", flag_state_str(v->drop_tagged));
 }
 
 void pp_port(FILE *fp, int print,
@@ -2066,6 +2069,9 @@ static int match_get_port_vlan(FILE *fp __unused, int print __unused,
 	if (p[NET_MAT_PORT_T_VLAN_DEF_VLAN])
 		vlan->def_vlan = nla_get_u32(p[NET_MAT_PORT_T_VLAN_DEF_VLAN]);
 
+	if (p[NET_MAT_PORT_T_VLAN_DROP_TAGGED])
+		vlan->drop_tagged = nla_get_u32(p[NET_MAT_PORT_T_VLAN_DROP_TAGGED]);
+
 	return 0;
 }
 
@@ -2771,6 +2777,9 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p)
 		return -EMSGSIZE;
 
 	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_VLAN_DEF_VLAN, p->vlan.def_vlan))
+		return -EMSGSIZE;
+
+	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_VLAN_DROP_TAGGED, p->vlan.drop_tagged))
 		return -EMSGSIZE;
 
 	nla_nest_end(nlbuf, stats);
