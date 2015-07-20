@@ -908,7 +908,6 @@ int get_action_arg(int argc, char **argv, bool need_args,
 	if (!reqs_args || !need_args)
 		goto done;
 
-	advance++;
 	next_arg();
 
 	/* If the type of argument is variadic then we need to consume all
@@ -923,7 +922,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 
 		variadic = true;
 
-		while (*argv) {
+		while (*argv && strcmp(*argv, "action") != 0) {
 			num_args++;
 			next_arg();
 		}
