@@ -879,7 +879,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 	unsigned int i, num_args = 0, reqs_args = 0;
 	int err = 0, advance = 0;
 	__u32 type = 0;
-	char *has_dots;
+	char *has_dots, *name;
 	bool variadic = false;
 
 	next_arg();
@@ -905,6 +905,9 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		reqs_args++;
 
 	action->uid = a->uid;
+	if (a->name)
+		action->name = strdup(a->name);
+
 	if (!reqs_args || !need_args)
 		goto done;
 
@@ -941,8 +944,10 @@ int get_action_arg(int argc, char **argv, bool need_args,
 
 	for (i = 0; i < num_args; i++) {
 		if (i < reqs_args &&
-		    a->args[i].type != NET_MAT_ACTION_ARG_TYPE_VARIADIC)
+		    a->args[i].type != NET_MAT_ACTION_ARG_TYPE_VARIADIC) {
 			type = a->args[i].type;
+			name = a->args[i].name;
+		}
 
 		if (*argv == NULL && !variadic) {
 			fprintf(stderr, "Error: missing action arg. expected `%s %s`\n",
@@ -952,6 +957,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		}
 
 		action->args[i].type = type;
+		action->args[i].name = strdup(name);
 
 		switch (type) {
 		case NET_MAT_ACTION_ARG_TYPE_U8:
@@ -1316,6 +1322,15 @@ get_attrib_arg(int argc, char **argv, __u32 table_uid, struct net_mat_named_valu
 	return advance;
 }
 
+static void match_free_action(struct net_mat_action *a)
+{
+	int i;
+
+	free(a->name);
+	for (i = 0; a->args && a->args[i].type; i++)
+		free(a->args[i].name);
+}
+
 int
 match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		     int argc, char **argv, uint8_t cmd)
@@ -1365,7 +1380,7 @@ match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 			action_count++;
 			for (; advance; advance--)
 				next_arg();
-			free(a.name);
+			match_free_action(&a);
 		} else if (strcmp(*argv, "attrib") == 0) {
 			if (attrib_count >= MAX_ATTRIBS) {
 				fprintf(stderr, "Error: too many attributes\n");
