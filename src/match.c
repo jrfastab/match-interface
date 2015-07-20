@@ -1352,7 +1352,7 @@ match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 			for (; advance; advance--)
 				next_arg();
 		} else if (strcmp(*argv, "action") == 0) {
-			struct net_mat_action a;
+			struct net_mat_action a = {0};
 
 			if (action_count >= MAX_ACTIONS) {
 				fprintf(stderr, "Error: too many actions\n");
