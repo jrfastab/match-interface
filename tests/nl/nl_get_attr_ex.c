@@ -145,4 +145,6 @@ int main(void)
                 return -EINVAL;
         }
 	pp_ports(stdout, true, ports);
+
+	return 0;
 }
