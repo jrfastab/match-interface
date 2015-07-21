@@ -879,7 +879,7 @@ int get_action_arg(int argc, char **argv, bool need_args,
 	unsigned int i, num_args = 0, reqs_args = 0;
 	int err = 0, advance = 0;
 	__u32 type = 0;
-	char *has_dots, *name;
+	char *has_dots, *name = NULL;
 	bool variadic = false;
 
 	next_arg();
@@ -957,7 +957,8 @@ int get_action_arg(int argc, char **argv, bool need_args,
 		}
 
 		action->args[i].type = type;
-		action->args[i].name = strdup(name);
+		if (name)
+			action->args[i].name = strdup(name);
 
 		switch (type) {
 		case NET_MAT_ACTION_ARG_TYPE_U8:
