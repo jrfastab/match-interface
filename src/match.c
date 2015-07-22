@@ -79,7 +79,7 @@ static void process_rx_message(int verbose);
 
 static int
 get_match_arg(int argc, char **argv, bool need_value, bool need_mask_type,
-		struct net_mat_field_ref *match);
+		struct net_mat_field_ref *match, const char **valid_keyword_list);
 
 static int
 get_action_arg(int argc, char **argv, bool need_args,
@@ -108,6 +108,8 @@ rule_get_send(int verbose, uint32_t pid, int family, unsigned int ifindex,
 static int
 match_send_recv(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		uint8_t cmd);
+
+static bool is_valid_keyword(char **argv, const char **valid_keyword_list);
 
 static void match_usage(void)
 {
@@ -636,13 +638,34 @@ void process_rx_message(int verbose)
 
 #define next_arg() do { argv++; argc--; } while (0)
 
+ /**
+ * Determine if argv matches any string in a list of keywords
+ *
+ * @param argv
+ * 	Value to search for
+ * @param valid_keyword_list
+ * 	A NULL terminated array of strings
+ * @return true if argv is found in list, false otherwise
+ */
+
+bool is_valid_keyword(char **argv, const char **valid_keyword_list)
+{
+	int  i;
+	for (i = 0; valid_keyword_list[i]; i++) {
+		if (strcmp(*argv,  valid_keyword_list[i]) == 0)
+			return true;
+	}
+	return false;
+}
+
 int get_match_arg(int argc, char **argv, bool need_value, bool need_mask_type,
-		  struct net_mat_field_ref *match)
+		  struct net_mat_field_ref *match, const char **valid_keyword_list)
 {
 	char *strings, *instance, *s_fld, *has_dots;
 	struct net_mat_hdr_node *hdr_node;
 	struct net_mat_field *field;
 	int advance = 0, err = 0;
+	__u64 mask;
 
 	next_arg();
 	strings = *argv;
@@ -812,9 +835,31 @@ int get_match_arg(int argc, char **argv, bool need_value, bool need_mask_type,
 
 	next_arg(); /* need a mask if its not an exact match */
 
-	if (*argv == NULL) {
-		fprintf(stderr, "Error: missing match mask\n");
-		return -EINVAL;
+	mask = (1ULL << field->bitwidth) - 1;
+
+	/* If end of the line is reached, or if the next value appearing on
+	 * the command line appears in the list of keywords, then a mask
+	 * value is not expected. Instead, 'exact' mask is assumed.
+	 */
+	if (*argv == NULL || is_valid_keyword(argv, valid_keyword_list)) {
+		switch (match->type) {
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U8:
+			match->v.u8.mask_u8 = (__u8)mask;
+			break;
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U16:
+			match->v.u16.mask_u16 = (__u16)mask;
+			break;
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U32:
+			match->v.u32.mask_u32 = (__u32)mask;
+			break;
+		case NET_MAT_FIELD_REF_ATTR_TYPE_U64:
+			match->v.u64.mask_u64 = mask;
+			break;
+		default:
+			fprintf(stderr,"Error: Invalid mask type\n");
+			return -EINVAL;
+		}
+		return advance;
 	}
 
 	switch (match->type) {
@@ -1363,7 +1408,7 @@ match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 			advance = get_match_arg(argc, argv, false, true,
-					&matches[match_count]);
+					&matches[match_count], NULL);
 			if (advance < 1)
 				return -EINVAL;
 			match_count++;
@@ -1815,6 +1860,8 @@ rule_set_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	int err = 0;
 	struct net_mat_rule rule;
 	struct nlattr *rules;
+	const char *valid_keyword_list [] = {
+		"match", "action", "prio", "handle", "table", NULL};
 
 	memset(&rule, 0, sizeof(rule));
 	memset(matches, 0, sizeof(struct net_mat_field_ref) * MAX_MATCHES);
@@ -1826,7 +1873,7 @@ rule_set_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	while (argc > 0) {
 		if (strcmp(*argv, "match") == 0) {
 			advance = get_match_arg(argc, argv, true, false,
-					&matches[match_count]);
+					&matches[match_count], valid_keyword_list);
 			if (advance < 0) {
 				fprintf(stderr, "Error: invalid match argument\n");
 				return -EINVAL;
