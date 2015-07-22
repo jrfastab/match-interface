@@ -38,12 +38,12 @@ int main(void)
 	nsd = match_nl_get_socket();
 	if (!nsd) {
 		fprintf(stderr, "Error: socket allocation failed\n");
-                return -EINVAL;
+		return -EINVAL;
 	}
 
 	pid = match_pid_lookup();
 	if (pid == 0)
-                return -EINVAL;
+		return -EINVAL;
 
 	family = NET_MAT_DFLT_FAMILY;
 
@@ -54,14 +54,16 @@ int main(void)
 	headers = match_nl_get_headers(nsd, pid, 0, family);
 	if (!headers) {
 		fprintf(stderr, "Error: get_headers failed\n");
-                return -EINVAL;
+		return -EINVAL;
 	}
 	hdr_gph_node = match_nl_get_hdr_graph(nsd, pid, 0, family);
 	if (!hdr_gph_node) {
-                fprintf(stderr, "Error: get_header_graph failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_header_graph failed\n");
+		return -EINVAL;
+	}
 	pp_header_graph(stdout, true, hdr_gph_node);
+	free(hdr_gph_node);
+	free(headers);
 	printf("\n");
 
 	printf("----------------------------------------\n");
@@ -69,21 +71,24 @@ int main(void)
 	printf("----------------------------------------\n");
 	actions = match_nl_get_actions(nsd, pid, 0, family);
 	if (!actions) {
-                fprintf(stderr, "Error: get_actions failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_actions failed\n");
+		return -EINVAL;
+	}
 	tables = match_nl_get_tables(nsd, pid, 0, family);
 	if (!tables) {
-                fprintf(stderr, "Error: get_tables failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_tables failed\n");
+		return -EINVAL;
+	}
 	match_push_tables_a(tables);
 	tbl_gph_node = match_nl_get_tbl_graph(nsd, pid, 0, family);
 	if (!tbl_gph_node) {
-                fprintf(stderr, "Error: get_table_graph failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_table_graph failed\n");
+		return -EINVAL;
+	}
 	pp_table_graph(stdout, true, tbl_gph_node);
+	free(tbl_gph_node);
+	free(tables);
+	free(actions);
 	printf("\n");
 
 	printf("----------------------------------------\n");
@@ -91,11 +96,12 @@ int main(void)
 	printf("----------------------------------------\n");
 	headers = match_nl_get_headers(nsd, pid, 0, family);
 	if (!headers) {
-                fprintf(stderr, "Error: get_headers failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_headers failed\n");
+		return -EINVAL;
+	}
 	for (i = 0 ; headers[i].uid ; i++)
 		pp_header(stdout, true, &headers[i]);
+	free(headers);
 	printf("\n");
 
 	printf("----------------------------------------\n");
@@ -103,10 +109,11 @@ int main(void)
 	printf("----------------------------------------\n");
 	actions = match_nl_get_actions(nsd, pid, 0, family);
 	if (!actions) {
-                fprintf(stderr, "Error: get_actions failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_actions failed\n");
+		return -EINVAL;
+	}
 	pp_actions(stdout, true, actions);
+	free(actions);
 	printf("\n");
 
 	printf("----------------------------------------\n");
@@ -114,26 +121,30 @@ int main(void)
 	printf("----------------------------------------\n");
 	headers = match_nl_get_headers(nsd, pid, 0, family);
 	if (!headers) {
-                fprintf(stderr, "Error: get_headers failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_headers failed\n");
+		return -EINVAL;
+	}
 	hdr_gph_node = match_nl_get_hdr_graph(nsd, pid, 0, family);
 	if (!hdr_gph_node) {
-                fprintf(stderr, "Error: get_header_graph failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_header_graph failed\n");
+		return -EINVAL;
+	}
 	actions = match_nl_get_actions(nsd, pid, 0, family);
 	if (!actions) {
-                fprintf(stderr, "Error: get_actions failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_actions failed\n");
+		return -EINVAL;
+	}
 	tables = match_nl_get_tables(nsd, pid, 0, family);
 	if (!tables) {
-                fprintf(stderr, "Error: get_tables failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_tables failed\n");
+		return -EINVAL;
+	}
 	for (i = 0 ; tables[i].uid ; i++)
 		pp_table(stdout, true, &tables[i]);
+	free(tables);
+	free(actions);
+	free(hdr_gph_node);
+	free(headers);
 	printf("\n");
 
 	printf("----------------------------------------\n");
@@ -141,10 +152,11 @@ int main(void)
 	printf("----------------------------------------\n");
 	ports = match_nl_get_ports(nsd,pid, 0, family, min, max);
 	if (!ports) {
-                fprintf(stderr, "Error: get_ports failed\n");
-                return -EINVAL;
-        }
+		fprintf(stderr, "Error: get_ports failed\n");
+		return -EINVAL;
+	}
 	pp_ports(stdout, true, ports);
+	free(ports);
 
 	return 0;
 }
