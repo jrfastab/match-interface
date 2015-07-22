@@ -74,6 +74,7 @@ int main(void)
 		fprintf(stderr, "Error: get_actions failed\n");
 		return -EINVAL;
 	}
+	match_push_actions_ary(actions);
 	tables = match_nl_get_tables(nsd, pid, 0, family);
 	if (!tables) {
 		fprintf(stderr, "Error: get_tables failed\n");
@@ -134,6 +135,7 @@ int main(void)
 		fprintf(stderr, "Error: get_actions failed\n");
 		return -EINVAL;
 	}
+	match_push_actions_ary(actions);
 	tables = match_nl_get_tables(nsd, pid, 0, family);
 	if (!tables) {
 		fprintf(stderr, "Error: get_tables failed\n");
