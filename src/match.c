@@ -216,6 +216,7 @@ static void set_rule_usage(void)
 	printf("  MATCH_VALUE     : the value to match\n");
 	printf("  MASK_VALUE      : the mask to use against the match value\n");
 	printf("For example: match ethernet.dst_mac 00:01:02:03:04:05 ff:ff:ff:ff:ff:ff\n");
+	printf("If MASK_VALUE is not specified then 'exact' mask is assumed\n");
 	printf("\n");
 	printf("Actions:\n");
 	printf("  ACTION      : ACTION_NAME [ACTION_ARG...]\n");
