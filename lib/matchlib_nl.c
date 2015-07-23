@@ -117,6 +117,7 @@ uint32_t match_pid_lookup(void)
 	err = fscanf(fd, "%" SCNu32 "", &pid);
 	if (err < 0) {
 		MAT_LOG(ERR, "Error: pid not found\n");
+		fclose(fd);
 		return 0;
 	}
 
