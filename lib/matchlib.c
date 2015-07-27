@@ -454,6 +454,7 @@ static struct nla_policy net_mat_port_policy[NET_MAT_PORT_T_MAX+1] = {
 	[NET_MAT_PORT_T_SPEED]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_MAX_FRAME_SIZE]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_VLAN]	= { .type = NLA_U32, },
+	[NET_MAT_PORT_T_MAC_ADDR]	= { .type = NLA_U64, },
 	[NET_MAT_PORT_T_PCI]   = { .type = NLA_UNSPEC, .minlen = sizeof(struct net_mat_port_pci)},
 };
 
@@ -2109,6 +2110,9 @@ int match_get_port(FILE *fp, int print, struct nlattr *nlattr,
 		port->max_frame_size =
 			nla_get_u32(p[NET_MAT_PORT_T_MAX_FRAME_SIZE]);
 
+	if (p[NET_MAT_PORT_T_MAC_ADDR])
+		port->mac_addr = nla_get_u64(p[NET_MAT_PORT_T_MAC_ADDR]);
+
 	if (p[NET_MAT_PORT_T_PCI]) {
 		struct net_mat_port_pci *pci;
 
@@ -2760,6 +2764,9 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p)
 	                p->max_frame_size))
 		return -EMSGSIZE;
 
+	if (p->mac_addr && nla_put_u64(nlbuf, NET_MAT_PORT_T_MAC_ADDR, p->mac_addr))
+		return -EMSGSIZE;
+
 	stats = nla_nest_start(nlbuf, NET_MAT_PORT_T_STATS);
 	if (!stats)
 		return -EMSGSIZE;
@@ -2806,9 +2813,7 @@ int match_put_ports(struct nl_msg *nlbuf,
 	if (!ports)
 		return -EMSGSIZE;
 
-	/* sometimes the pci bus is sent down instead of port id so
-	 * we need to check for both. */
-	for (i = 0; p[i].port_id > 0 || p[i].pci.bus > 0; i++) {
+	for (i = 0; (p[i].port_id > 0) || (p[i].pci.bus > 0) || (p[i].mac_addr > 0); i++) {
 		port = nla_nest_start(nlbuf, NET_MAT_PORT);
 		if (!port)
 			return -EMSGSIZE;

@@ -1687,7 +1687,7 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 			return -EINVAL;
 		}
 
-		err = backend->get_lport(&ports[count].pci,
+		err = backend->get_lport(&ports[count],
 					 &ports[count].port_id);
 		if (err) {
 			MAT_LOG(ERR, "get_lports failed in backend.\n");

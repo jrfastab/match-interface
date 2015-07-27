@@ -139,4 +139,8 @@ int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 		      unsigned int ifindex, int family,
 		      uint8_t bus, uint8_t device, uint8_t function,
 		      uint32_t *lport);
+
+int match_nl_mac_lport(struct nl_sock *nsd, uint32_t pid,
+		      unsigned int ifindex, int family,
+		      uint64_t mac, uint32_t *lport);
 #endif

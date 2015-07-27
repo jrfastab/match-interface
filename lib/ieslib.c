@@ -843,7 +843,7 @@ static int pci_to_pep(uint8_t bus)
 	return (int)((buf[5] & 0xf00) >> 8);
 }
 
-static int ies_port_get_lport(struct net_mat_port_pci *pci, unsigned int *lport)
+static int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function, unsigned int *lport)
 {
 	int err;
 	int index;
@@ -851,29 +851,29 @@ static int ies_port_get_lport(struct net_mat_port_pci *pci, unsigned int *lport)
 	int port = -1;
 	int type;
 
-	pep = pci_to_pep(pci->bus);
+	pep = pci_to_pep(bus);
 	if (pep < 0) {
 		MAT_LOG(ERR, "Error: %02x:%02x.%d is not supported.\n",
-		        pci->bus, pci->device, pci->function);
+		        bus, device, function);
 		return -EINVAL;
 	}
 
-	if (!pci->device && !pci->function) {
+	if (!device && !function) {
 		/* PF always has device == 0 and function == 0 */
 		index = 0;
 		type = FM_PCIE_PORT_PF;
-	} else if (pci->function < 8) {
+	} else if (function < 8) {
 		/*
 		 * For a VF, there are up to 8 functions created per PCI
 		 * device. If there are more than 7 VFs created, the device
 		 * will be incremented, and the function numbering will
 		 * restart from 0.
 		 */
-		index = (pci->device * 8 + pci->function) - 1;
+		index = (device * 8 + function) - 1;
 		type = FM_PCIE_PORT_VF;
 	} else {
 		MAT_LOG(ERR, "Error: %02x:%02x.%d has invalid function.\n",
-		        pci->bus, pci->device, pci->function);
+		        bus, device, function);
 		return -EINVAL;
 	}
 
@@ -889,9 +889,61 @@ static int ies_port_get_lport(struct net_mat_port_pci *pci, unsigned int *lport)
 	*lport = (unsigned int)port;
 
 	MAT_LOG(DEBUG, "get_lport pci %u:%u.%u lport %d\n",
-	        pci->bus, pci->device, pci->function, *lport);
+	        bus, device, function, *lport);
 
 	return 0;
+}
+
+static int mac_to_lport(uint64_t mac, unsigned int *lport)
+{
+	fm_status err;
+	fm_int nEntries = 0;
+	fm_macAddressEntry *entries = NULL;
+	int i;
+
+	err = fmGetAddressTableExt(sw, &nEntries, NULL, 0);
+	if (err)
+		return cleanup(__func__, err);
+
+	if (nEntries == 0)
+		return -ENOENT;
+
+	entries = malloc(sizeof(*entries) * (size_t)nEntries);
+	if (!entries)
+		return -ENOMEM;
+
+	err = fmGetAddressTableExt(sw, &nEntries, entries, nEntries);
+	if (err) {
+		free(entries);
+		return cleanup(__func__, err);
+	}
+
+	for (i = 0; i < nEntries; ++i) {
+		uint64_t hw_addr = entries[i].macAddress;
+		int port = entries[i].port;
+
+		if (mac == hw_addr) {
+			*lport = (unsigned int)port;
+			free(entries);
+			return 0;
+		}
+	}
+
+	free(entries);
+	return -ENOENT;
+}
+
+static int ies_port_get_lport(struct net_mat_port *port, unsigned int *lport)
+{
+	int err = -EINVAL;
+
+	if (port->pci.bus != 0)
+		err = pci_to_lport(port->pci.bus, port->pci.device,
+					port->pci.function, lport);
+	else if (port->mac_addr != 0)
+		err = mac_to_lport(port->mac_addr, lport);
+
+	return err;
 }
 
 struct match_backend ies_pipeline_backend = {
@@ -1527,7 +1579,7 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	bool mac_found = false;
 	bool lport_found = false;
 	bool vsi_found = false;
-	struct net_mat_port_pci pci;
+	struct net_mat_port port;
 	int lport = -1;
 	__u32 group;
 	int i;
@@ -1553,10 +1605,10 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	for (i = 0; actions && actions[i].uid; i++) {
 		switch(actions[i].uid) {
 		case ACTION_FORWARD_VSI:
-			memset(&pci, 0, sizeof(pci));
-			pci.bus = actions[i].args[0].v.value_u8;
-			pci.device = actions[i].args[1].v.value_u8;
-			pci.function = actions[i].args[2].v.value_u8;
+			memset(&port, 0, sizeof(port));
+			port.pci.bus = actions[i].args[0].v.value_u8;
+			port.pci.device = actions[i].args[1].v.value_u8;
+			port.pci.function = actions[i].args[2].v.value_u8;
 			vsi_found = true;
 			break;
 		case ACTION_SET_EGRESS_PORT:
@@ -1600,7 +1652,7 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	}
 
 	if (vsi_found) {
-		err = ies_port_get_lport(&pci, (unsigned int *)&lport);
+		err = ies_port_get_lport(&port, (unsigned int *)&lport);
 		if (err) {
 			MAT_LOG(ERR, "Error: pci to log port\n");
 			return -EINVAL;
@@ -2289,7 +2341,7 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 	__u8 si_mask;
 	/* nsh service index appears 15B following UDP header */
 	const int si_off = 15;
-	struct net_mat_port_pci pci;
+	struct net_mat_port port;
 	__u32 group_id;
 #ifdef VXLAN_MCAST
 	struct my_mcast_listener mcast_listeners[MAX_LISTENERS_PER_GROUP];
@@ -2500,12 +2552,12 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 		case ACTION_FORWARD_VSI:
 			act |= FM_FLOW_ACTION_FORWARD;
 
-			memset(&pci, 0, sizeof(pci));
-			pci.bus = actions[i].args[0].v.value_u8;
-			pci.device = actions[i].args[1].v.value_u8;
-			pci.function = actions[i].args[2].v.value_u8;
+			memset(&port, 0, sizeof(port));
+			port.pci.bus = actions[i].args[0].v.value_u8;
+			port.pci.device = actions[i].args[1].v.value_u8;
+			port.pci.function = actions[i].args[2].v.value_u8;
 
-			err = ies_port_get_lport(&pci,
+			err = ies_port_get_lport(&port,
 			                         (__u32 *)&param.logicalPort);
 			if (err) {
 				MAT_LOG(ERR, "Error: pci to log port\n");

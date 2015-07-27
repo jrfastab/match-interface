@@ -105,8 +105,8 @@ struct match_backend {
 	/* Release reference to ports */
 	int (*set_ports)(struct net_mat_port *ports);
 
-	/* Lookup PCI function logical port identifier */
-	int (*get_lport)(struct net_mat_port_pci *pci, unsigned int *lport);
+	/* Lookup PCI/MAC function logical port identifier */
+	int (*get_lport)(struct net_mat_port *port, unsigned int *lport);
 };
 
 /**

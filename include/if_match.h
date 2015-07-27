@@ -695,6 +695,7 @@ enum {
 	NET_MAT_PORT_T_STATE,
 	NET_MAT_PORT_T_SPEED,
 	NET_MAT_PORT_T_PCI,
+	NET_MAT_PORT_T_MAC_ADDR,
 	NET_MAT_PORT_T_STATS,
 	NET_MAT_PORT_T_MAX_FRAME_SIZE,
 	NET_MAT_PORT_T_VLAN,
@@ -717,6 +718,7 @@ struct net_mat_port {
 	enum port_state state;
 	enum port_speed speed;
 	__u32 max_frame_size;
+	__u64 mac_addr;
 	struct net_mat_port_pci pci;
 	struct net_mat_port_stats stats;
 	struct net_mat_port_vlan vlan;
