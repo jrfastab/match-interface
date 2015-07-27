@@ -309,6 +309,7 @@ static inline const char *flag_state_str(__u32 i) {
 struct net_mat_port_vlan {
 	__u32 def_vlan;
 	enum flag_state drop_tagged;
+	enum flag_state drop_untagged;
 };
 
 enum {
@@ -613,6 +614,7 @@ enum {
 	NET_MAT_PORT_T_VLAN_UNSPEC,
 	NET_MAT_PORT_T_VLAN_DEF_VLAN,
 	NET_MAT_PORT_T_VLAN_DROP_TAGGED,
+	NET_MAT_PORT_T_VLAN_DROP_UNTAGGED,
 	__NET_MAT_PORT_T_VLAN_MAX,
 };
 #define NET_MAT_PORT_T_VLAN_MAX (__NET_MAT_PORT_T_VLAN_MAX - 1)

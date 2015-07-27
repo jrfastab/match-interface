@@ -522,6 +522,7 @@ static int ies_ports_get(struct net_mat_port **ports)
 		fm_int port;
 		fm_bool	pi = FM_DISABLED;
 		fm_bool drop_tagged = FM_DISABLED;
+		fm_bool drop_untagged = FM_DISABLED;
 		fm_int mode, state, info[64];
 		fm_portCounters counter;
 		fm_uint32 speed;
@@ -629,6 +630,26 @@ static int ies_ports_get(struct net_mat_port **ports)
 			break;
 		}
 
+		err = fmGetPortAttribute(sw, port, FM_PORT_DROP_UNTAGGED,
+					 &drop_untagged);
+		if (err != FM_OK) {
+			cleanup("fmGetPortAttribute()", err);
+			continue;
+		}
+
+		switch (drop_untagged) {
+		case FM_DISABLED:
+			p[i].vlan.drop_untagged = NET_MAT_PORT_T_FLAG_DISABLED;
+			break;
+		case FM_ENABLED:
+			p[i].vlan.drop_untagged = NET_MAT_PORT_T_FLAG_ENABLED;
+			break;
+		default:
+			p[i].vlan.drop_untagged = NET_MAT_PORT_T_FLAG_UNSPEC;
+			MAT_LOG(ERR, "Warning: unknown flag value %d\n", drop_untagged);
+			break;
+		}
+
 		p[i].port_id = (__u32)cpi;
 		i++;
 	}
@@ -643,6 +664,7 @@ static int ies_ports_set(struct net_mat_port *ports)
 	struct net_mat_port *p;
 	fm_switchInfo swInfo;
 	fm_bool drop_tagged = FM_DISABLED;
+	fm_bool drop_untagged = FM_DISABLED;
 	int i, err = 0;
 
 	fmGetSwitchInfo(sw, &swInfo);
@@ -739,6 +761,26 @@ static int ies_ports_set(struct net_mat_port *ports)
 
 		if (err) {
 			MAT_LOG(ERR, "Error: fmSetPortAttribute FM_PORT_DROP_TAGGED failed!\n");
+			return -EINVAL;
+		}
+
+		switch (p->vlan.drop_untagged) {
+		case NET_MAT_PORT_T_FLAG_UNSPEC:
+			break;
+		case NET_MAT_PORT_T_FLAG_ENABLED:
+			drop_untagged = FM_ENABLED;
+			err = fmSetPortAttribute(sw, port, FM_PORT_DROP_UNTAGGED, &drop_untagged);
+			break;
+		case NET_MAT_PORT_T_FLAG_DISABLED:
+			drop_untagged = FM_DISABLED;
+			err = fmSetPortAttribute(sw, port, FM_PORT_DROP_UNTAGGED, &drop_untagged);
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (err) {
+			MAT_LOG(ERR, "Error: fmSetPortAttribute FM_PORT_DROP_UNTAGGED failed!\n");
 			return -EINVAL;
 		}
 	}
