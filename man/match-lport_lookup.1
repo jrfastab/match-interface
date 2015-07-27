@@ -9,12 +9,12 @@ match\-lport_lookup \- Lookup a logical port number of PCI device
 .SH SYNOPSIS
 .nf
 \fImatch lport_lookup\fR [\-f <family>] [\-p <pid>] [\-g] [\-h] [\-i ifname] [\-s]
-            pci <BUS:DEVICE.FUNCTION>
+            (pci <BUS:DEVICE.FUNCTION> | mac <MACADDR>)
 .fi
 
 .\" Detailed description
 .SH DESCRIPTION
-Send a command instructing a match action table (MAT) daemon to lookup and respond with the logical port number associated with a given PCI device.
+Send a command instructing a match action table (MAT) daemon to lookup and respond with the logical port number associated with a given PCI device or MAC address.
 .sp
 The logical port number can be used in matches and actions taking a port number as a parameter.
 
@@ -55,4 +55,10 @@ Silence verbose printing
 pci <BUS:DEVICE.FUNCTION>
 .RS 4
 The PCI bus, device, and function numbers of the device.
+.RE
+
+.br
+mac <MACADDR>
+.RS 4
+The MAC address of the device.
 .RE

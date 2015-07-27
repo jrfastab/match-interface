@@ -238,8 +238,13 @@ static void get_rules_usage(void)
 
 static void get_lport_usage(void)
 {
-	printf("Usage: %s lookup_lport pci BUS:DEVICE.FUNCTION\n", progname);
+	printf("Usage: %s lookup_lport (pci BUS:DEVICE.FUNCTION | mac MACADDR)\n", progname);
+	printf("Where:\n");
+	printf("  pci    is the pci BUS:DEVICE.FUNCTION of the port to lookup\n");
+	printf("  mac    is the MAC Address of the port to lookup\n");
+	printf("Note: Exactly one pci/mac argument is required\n");
 }
+
 static void get_port_usage(void)
 {
 	printf("Usage: %s get_ports [min NUM] [max NUM]\n", progname);
@@ -2005,6 +2010,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		    int argc, char **argv, uint8_t cmd)
 {
 	bool have_pci_query = false;
+	bool have_mac_query = false;
 	struct net_mat_port port;
 	struct match_msg *msg;
 	struct nlattr *nest0, *nest1;
@@ -2032,6 +2038,25 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 			have_pci_query = true;
+		} else if (strcmp(*argv, "mac") == 0) {
+			next_arg();
+
+			if (*argv == NULL) {
+				fprintf(stderr, "Error: missing mac address\n");
+				return -EINVAL;
+			}
+
+			if (match_macaddr2u64(&port.mac_addr, *argv)) {
+				fprintf(stderr,
+					"Error: Invalid u64 or MAC address value (%s)\n",
+					*argv);
+				get_lport_usage();
+				return -EINVAL;
+			} else {
+				/* one field was parsed */
+				err = 1;
+			}
+			have_mac_query = true;
 		} else if (strcmp(*argv, "min") == 0) {
 			next_arg();
 			if (*argv == NULL) {
@@ -2070,10 +2095,12 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		argc--; argv++;
 	}
 
-	if (cmd == NET_MAT_PORT_CMD_GET_LPORT && !have_pci_query) {
-		fprintf(stderr, "Missing pci argument\n");
-		get_lport_usage();
-		return -EINVAL;
+	if (cmd == NET_MAT_PORT_CMD_GET_LPORT) {
+		if (!(have_pci_query ^ have_mac_query)) {
+			fprintf(stderr, "Exactly one pci/mac argument is required\n");
+			get_lport_usage();
+			return -EINVAL;
+		}
 	}
 
 	port.port_id = 0;
@@ -2126,7 +2153,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		return -EMSGSIZE;
 	}
 
-	if (have_pci_query) {
+	if (have_pci_query || have_mac_query) {
 		err = match_put_port(msg->nlbuf, &port);
 		if (err) {
 			fprintf(stderr, "Error: match put port failed\n");
