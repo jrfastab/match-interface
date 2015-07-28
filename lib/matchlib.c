@@ -472,6 +472,7 @@ static struct nla_policy net_mat_port_vlan_policy[NET_MAT_PORT_T_VLAN_MAX+1] = {
 	[NET_MAT_PORT_T_VLAN_DEF_VLAN] = { .type = NLA_U32, },
 	[NET_MAT_PORT_T_VLAN_DROP_TAGGED] = { .type = NLA_U32, },
 	[NET_MAT_PORT_T_VLAN_DROP_UNTAGGED] = { .type = NLA_U32, },
+	[NET_MAT_PORT_T_VLAN_DEF_PRIORITY] = { .type = NLA_U32, },
 };
 
 static char *
@@ -806,6 +807,8 @@ static void pp_port_vlan(FILE *fp, int print, struct net_mat_port_vlan *v)
 {
 	pfprintf(fp, print, "    vlan:\n");
 	pfprintf(fp, print, "        default vlan: %u\n", v->def_vlan);
+	if (v->def_priority != NET_MAT_PORT_T_DEF_PRI_UNSPEC)
+		pfprintf(fp, print, "        default priority: %u\n", v->def_priority);
 	if (v->drop_tagged)
 		pfprintf(fp, print, "        drop tagged: %s\n", flag_state_str(v->drop_tagged));
 	if (v->drop_untagged)
@@ -2079,6 +2082,9 @@ static int match_get_port_vlan(FILE *fp __unused, int print __unused,
 	if (p[NET_MAT_PORT_T_VLAN_DROP_UNTAGGED])
 		vlan->drop_untagged = nla_get_u32(p[NET_MAT_PORT_T_VLAN_DROP_UNTAGGED]);
 
+	if (p[NET_MAT_PORT_T_VLAN_DEF_PRIORITY])
+		vlan->def_priority = nla_get_u32(p[NET_MAT_PORT_T_VLAN_DEF_PRIORITY]);
+
 	return 0;
 }
 
@@ -2157,6 +2163,7 @@ int match_get_ports(FILE *fp, int print, struct nlattr *nl,
 
 	rem = nla_len(nl);
 	for (cnt = 0, i = nla_data(nl); nla_ok(i, rem); i = nla_next(i, &rem), cnt++) {
+		ports[cnt].vlan.def_priority = NET_MAT_PORT_T_DEF_PRI_UNSPEC;
 		err = match_get_port(fp, print, i, &ports[cnt]);
 		if (err)
 			goto out;
@@ -2796,6 +2803,9 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p)
 		return -EMSGSIZE;
 
 	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_VLAN_DROP_UNTAGGED, p->vlan.drop_untagged))
+		return -EMSGSIZE;
+
+	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_VLAN_DEF_PRIORITY, p->vlan.def_priority))
 		return -EMSGSIZE;
 
 	nla_nest_end(nlbuf, stats);

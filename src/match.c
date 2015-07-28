@@ -257,11 +257,12 @@ static void get_port_usage(void)
 static void set_port_usage(void)
 {
 	printf("Usage: %s set_port port NUM [speed NUM] [state NUM] [max_frame_size NUM] "
-	       "[def_vlan NUM] [drop_tagged VAL] [drop_untagged VAL]\n", progname);
+	       "[def_vlan NUM] [def_priority NUM] [drop_tagged VAL] [drop_untagged VAL]\n", progname);
 	printf(" state: up down\n"); 
 	printf(" speed: integer speed\n");
 	printf(" max_frame_size: integer maximum frame size\n");
 	printf(" def_vlan: integer port's default VLAN (1 - 4095)\n");
+	printf(" def_priority: integer port's default VLAN priority (0 - 7)\n");
 	printf(" drop_tagged: dropping tagged frames on ingress (enabled/disabled)\n");
 	printf(" drop_untagged: dropping untagged frames on ingress (enabled/disabled)\n");
 }
@@ -2184,6 +2185,7 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	struct net_mat_port port;
 
 	memset(&port, 0, sizeof(port));
+	port.vlan.def_priority = NET_MAT_PORT_T_DEF_PRI_UNSPEC;
 
 	opterr = 0;
 	while (argc > 0) {
@@ -2302,6 +2304,25 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				port.vlan.drop_untagged = NET_MAT_PORT_T_FLAG_DISABLED;
 			} else {
 				fprintf(stderr, "Error: invalid drop_untagged state\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+		} else if (strcmp(*argv, "def_priority") == 0) {
+			next_arg();
+			if (*argv == NULL) {
+				fprintf(stderr, "Error: missing priority\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+			err = sscanf(*argv, "%u", &port.vlan.def_priority);
+			if (err < 1) {
+				fprintf(stderr, "Error: priority invalid\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+
+			if (port.vlan.def_priority > 7) {
+				fprintf(stderr, "Error: default VLAN priority must be in range [0..7]\n");
 				set_port_usage();
 				return -EINVAL;
 			}

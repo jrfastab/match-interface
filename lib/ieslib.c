@@ -650,6 +650,13 @@ static int ies_ports_get(struct net_mat_port **ports)
 			break;
 		}
 
+		err = fmGetPortAttribute(sw, port, FM_PORT_DEF_PRI,
+					 &p[i].vlan.def_priority);
+		if (err != FM_OK) {
+			cleanup("fmGetPortAttribute()", err);
+			continue;
+		}
+
 		p[i].port_id = (__u32)cpi;
 		i++;
 	}
@@ -782,6 +789,15 @@ static int ies_ports_set(struct net_mat_port *ports)
 		if (err) {
 			MAT_LOG(ERR, "Error: fmSetPortAttribute FM_PORT_DROP_UNTAGGED failed!\n");
 			return -EINVAL;
+		}
+
+		if (p->vlan.def_priority != NET_MAT_PORT_T_DEF_PRI_UNSPEC) {
+			err = fmSetPortAttribute(sw, port, FM_PORT_DEF_PRI,
+			                         &p->vlan.def_priority);
+			if (err) {
+				MAT_LOG(ERR, "Error: SetPortAttribute FM_PORT_DEF_PRI failed!\n");
+				return -EINVAL;
+			}
 		}
 	}
 
