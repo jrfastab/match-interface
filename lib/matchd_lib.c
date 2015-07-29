@@ -728,13 +728,21 @@ match_is_valid_action_arg(struct net_mat_action *a,
 	if (!(a->args && args))
 		goto done;
 
-	for (i = 0; a->args[i].type; i++) {
-		if (a->args[i].type == NET_MAT_ACTION_ARG_TYPE_VARIADIC) {
-			/* Variadic can't be first argument */
-			if (i == 0)
-				goto done;
+	/* Variadic can't be first argument so abort on this case */
+	if (a->args[0].type == NET_MAT_ACTION_ARG_TYPE_VARIADIC)
+		goto done;
+
+	/* Walk argument list from client and verify it is the same type
+	 * as the backend. Variadic argument lists are handled special
+	 * because they allow variable number of arguments which is tracked
+	 * here by 'fixed'.
+	 */
+	for (i = 0; args[i].type; i++) {
+		if (!fixed &&
+		    a->args[i].type == NET_MAT_ACTION_ARG_TYPE_VARIADIC)
 			fixed = a->args[i-1].type;
-		}
+		else if (!fixed && !a->args[i].type)
+			goto done; /* more args than specified */
 
 		if (fixed) {
 			if (args[i].type != fixed)
@@ -744,10 +752,6 @@ match_is_valid_action_arg(struct net_mat_action *a,
 				goto done;
 		}
 	}
-
-	/* Cannot have more arguments than the action expects. */
-	if (!fixed && args[i].type)
-		goto done;
 
 	err = 0; /* If reached here, change err code to SUCCESS */
 done:
