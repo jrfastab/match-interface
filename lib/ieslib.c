@@ -667,6 +667,69 @@ static int ies_ports_get(struct net_mat_port **ports)
 	return 0;
 }
 
+static fm_uint32 speed_to_mode(enum port_speed speed)
+{
+	switch(speed) {
+	case NET_MAT_PORT_T_SPEED_1G:
+		return FM_ETH_MODE_1000BASE_X;
+	case NET_MAT_PORT_T_SPEED_10G:
+		return FM_ETH_MODE_10GBASE_SR;
+	case NET_MAT_PORT_T_SPEED_25G:
+		return FM_ETH_MODE_25GBASE_SR;
+	case NET_MAT_PORT_T_SPEED_40G:
+		return FM_ETH_MODE_40GBASE_SR4;
+	case NET_MAT_PORT_T_SPEED_100G:
+		return FM_ETH_MODE_100GBASE_SR4;
+	default:
+		return FM_ETH_MODE_DISABLED;
+	}
+}
+
+static int set_port_speed(int port, enum port_speed speed)
+{
+	fm_uint32 cur_mode = FM_ETH_MODE_DISABLED;
+	fm_uint32 new_mode = FM_ETH_MODE_DISABLED;
+	int err;
+
+	err = fmGetPortAttribute(sw, port, FM_PORT_ETHERNET_INTERFACE_MODE,
+	                         &cur_mode);
+	if (err != FM_OK)
+		return cleanup("fmGetPortAttribute", err);
+
+	/*
+	 * Set the new Ethernet mode based on the existing mode and desired
+	 * speed. Only fiber modes can be explicitely set since many copper
+	 * modes are required to be auto-negotiated.
+	 */
+	switch (cur_mode) {
+	case FM_ETH_MODE_1000BASE_X:
+	case FM_ETH_MODE_10GBASE_SR:
+	case FM_ETH_MODE_25GBASE_SR:
+	case FM_ETH_MODE_40GBASE_SR4:
+	case FM_ETH_MODE_100GBASE_SR4:
+		new_mode = speed_to_mode(speed);
+		break;
+	default:
+		new_mode = FM_ETH_MODE_DISABLED;
+		break;
+	}
+
+	if (new_mode == FM_ETH_MODE_DISABLED) {
+		MAT_LOG(ERR, "Cannot set port %d speed to %s\n", port,
+		        port_speed_str(speed));
+		return -EINVAL;
+	} else if (new_mode != cur_mode) {
+		err = fmSetPortAttribute(sw, port,
+		                         FM_PORT_ETHERNET_INTERFACE_MODE,
+		                         &new_mode);
+		if (err != FM_OK)
+			return cleanup("fmSetPortAttribute", err);
+	}
+
+	MAT_LOG(DEBUG, "Port %d speed %s\n", port, port_speed_str(speed));
+	return 0;
+}
+
 static int ies_ports_set(struct net_mat_port *ports)
 {
 	struct net_mat_port *p;
@@ -679,7 +742,6 @@ static int ies_ports_set(struct net_mat_port *ports)
 
 	for (p = &ports[0], i = 0 ; p->port_id > 0; p = &ports[i], i++)  {
 		fm_int port = (int)p->port_id;
-		fm_uint32 s = 0;
 
 		switch (p->state) {
 		case NET_MAT_PORT_T_STATE_UNSPEC:
@@ -699,36 +761,10 @@ static int ies_ports_set(struct net_mat_port *ports)
 			return -EINVAL;
 		}
 
-		switch (p->speed) {
-		case NET_MAT_PORT_T_SPEED_UNSPEC:
-			break;
-		case NET_MAT_PORT_T_SPEED_100G:
-			s = FM_PORT_CAPABILITY_SPEED_100G;
-			break;
-		case NET_MAT_PORT_T_SPEED_40G:
-			s = FM_PORT_CAPABILITY_SPEED_40G;
-			break;
-		case NET_MAT_PORT_T_SPEED_20G:
-			s = FM_PORT_CAPABILITY_SPEED_20G;
-			break;
-		case NET_MAT_PORT_T_SPEED_10G:
-			s = FM_PORT_CAPABILITY_SPEED_10G;
-			break;
-		case NET_MAT_PORT_T_SPEED_1G:
-			s = FM_PORT_CAPABILITY_SPEED_1G;
-			break;
-		case NET_MAT_PORT_T_SPEED_2D5G:
-			s = FM_PORT_CAPABILITY_SPEED_2PT5G;
-			break;
-		default:
-			return -EINVAL;
-			break;
-		}
-
 		if (p->speed != NET_MAT_PORT_T_SPEED_UNSPEC) {
-			err = fmSetPortAttribute(sw, port, FM_PORT_SPEED, &s);
+			err = set_port_speed(port, p->speed);
 			if (err) {
-				MAT_LOG(ERR, "Error: SetPortAttribute FM_PORT_SPEED failed!\n");
+				MAT_LOG(ERR, "Error: Set Port Speed failed!\n");
 				return -EINVAL;
 			}
 		}
