@@ -1127,13 +1127,15 @@ int switch_init(int one_vlan)
 
 	fmCreateSemaphore(seq_str, FM_SEM_BINARY, &seqSem, 0);
 
-	if ((err = fmInitialize(eventHandler)) != FM_OK) {
+	err = fmInitialize(eventHandler);
+	if (err != FM_OK) {
 		return cleanup("fmInitialize", err);
 	}
 
 	fmWaitSemaphore(&seqSem, &wait);
 
-	if ((err = fmSetSwitchState(sw, TRUE)) != FM_OK) {
+	err = fmSetSwitchState(sw, TRUE);
+	if (err != FM_OK) {
 		return cleanup("fmSetSwitchState", err);
 	}
 
@@ -1151,12 +1153,14 @@ int switch_init(int one_vlan)
 	/* init non cpu ports and put them into their own vlan, make sure */
 	/* the parser goes to l4, no vlan boundary check, and routable    */
 	for (cpi = 1 ; cpi < swInfo.numCardPorts ; cpi++) {
-		if ((err = fmMapCardinalPort(sw, cpi, &port, NULL)) != FM_OK) {
+		err = fmMapCardinalPort(sw, cpi, &port, NULL);
+		if (err != FM_OK) {
 			return cleanup("fmMapCardinalPort", err);
 		}
 		MAT_LOG(DEBUG, "cpi=%d, port=%d\n", cpi, port);
 
-		if ((err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi)) != FM_OK) {
+		err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi);
+		if (err != FM_OK) {
 			cleanup("fmGetPortAttribute", err);
 			MAT_LOG(DEBUG, "skip port %d\n", port);
 			continue;
@@ -1177,37 +1181,44 @@ int switch_init(int one_vlan)
 			fmSetVlanAttribute(sw, vlan, FM_VLAN_REFLECT, &vr);
 		}
 
-		if ((err = fmSetPortState(sw, port, FM_PORT_STATE_UP, 0)) != FM_OK) {
+		err = fmSetPortState(sw, port, FM_PORT_STATE_UP, 0);
+		if (err != FM_OK) {
 			return cleanup("fmSetPortState", err);
 		}
 		MAT_LOG(DEBUG, "set port %d to UP\n", port);
 
-		if ((err = fmAddVlanPort(sw, vlan, port, FALSE)) != FM_OK) {
+		err = fmAddVlanPort(sw, vlan, port, FALSE);
+		if (err != FM_OK) {
 			return cleanup("fmAddVlanPort", err);
 		}
 		MAT_LOG(DEBUG, "add port %d to vlan %u\n", port, vlan);
 
-		if ((err = fmSetVlanPortState(sw, vlan, port, FM_STP_STATE_FORWARDING)) != FM_OK) {
+		err = fmSetVlanPortState(sw, vlan, port, FM_STP_STATE_FORWARDING);
+		if (err != FM_OK) {
 			return cleanup("fmSetVlanPortState", err);
 		}
 		MAT_LOG(DEBUG, "set STP state of port %d in vlan %u to forwarding\n", port, vlan);
 
-		if ((err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan)) != FM_OK) {
+		err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan);
+		if (err != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
 		MAT_LOG(DEBUG, "set pvid for  port %d to vlan %u\n", port, vlan);
 
-		if ((err = fmSetPortAttribute(sw, port, FM_PORT_DROP_BV, &bv)) != FM_OK) {
+		err = fmSetPortAttribute(sw, port, FM_PORT_DROP_BV, &bv);
+		if (err != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
 		MAT_LOG(DEBUG, "set FM_PORT_DROP_BV for port %d to %d\n", port, bv);
 
-		if ((err = fmSetPortAttribute(sw, port, FM_PORT_PARSER, &pc)) != FM_OK) {
+		err = fmSetPortAttribute(sw, port, FM_PORT_PARSER, &pc);
+		if (err != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
 		MAT_LOG(DEBUG, "set FM_PORT_PARSER for port %d to %d\n", port, pc);
 
-		if ((err = fmSetPortAttribute(sw, port, FM_PORT_ROUTABLE, &re)) != FM_OK) {
+		err = fmSetPortAttribute(sw, port, FM_PORT_ROUTABLE, &re);
+		if (err != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
 		MAT_LOG(DEBUG, "set FM_PORT_ROUTABLE for port %d to %d\n", port, re);
@@ -1215,15 +1226,18 @@ int switch_init(int one_vlan)
 
 	/* port cpu port on default vlan */
 	defvlan = vlan = FM_DEFAULT_VLAN;
-	if ((err = fmGetCpuPort(sw, &port)) != FM_OK) {
+	err = fmGetCpuPort(sw, &port);
+	if (err != FM_OK) {
 		return cleanup("fmGetCpuPort", err);
 	}
 	MAT_LOG(DEBUG, "find cpu port %d\n", port);
-	if ((err = fmAddVlanPort(sw, vlan, port, FALSE)) != FM_OK) {
+	err = fmAddVlanPort(sw, vlan, port, FALSE);
+	if (err != FM_OK) {
 		return cleanup("fmAddVlanPort", err);
 	}
 	MAT_LOG(DEBUG, "add port %d to vlan %u\n", port, vlan);
-	if ((err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan)) != FM_OK) {
+	err = fmSetPortAttribute(sw, port, FM_PORT_DEF_VLAN, &defvlan);
+	if (err != FM_OK) {
 		return cleanup("fmSetPortAttribute", err);
 	}
 	MAT_LOG(DEBUG, "set pvid for  port %d to vlan %u\n", port, vlan);
@@ -1247,7 +1261,8 @@ static void switch_clean_shm(void)
 	struct shmid_ds shm_info;
 
 	MAT_LOG(DEBUG, "Cleaning up shared memory...");
-	if ((shm_key_env = getenv("FM_API_SHM_KEY")) != NULL) {
+	shm_key_env = getenv("FM_API_SHM_KEY");
+	if (shm_key_env != NULL) {
 		shm_key_str = strtok(shm_key_env, ",");
 		if (!shm_key_str)
 			return;
@@ -1302,12 +1317,14 @@ int switch_router_init(__u64 router_mac, int update_dmac, int update_smac,
 	rt = update_ttl ? FM_ENABLED : FM_DISABLED;
 
 	for (cpi = 1 ; cpi < swInfo.numCardPorts ; cpi++) {
-		if ((err = fmMapCardinalPort(sw, cpi, &port, NULL)) != FM_OK) {
+		err = fmMapCardinalPort(sw, cpi, &port, NULL);
+		if (err != FM_OK) {
 			return cleanup("fmMapCardinalPort", err);
 		}
 		MAT_LOG(DEBUG, "cpi=%d, port=%d\n", cpi, port);
 
-		if ((err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi)) != FM_OK) {
+		err = fmGetPortAttribute(sw, port, FM_PORT_INTERNAL, &pi);
+		if (err != FM_OK) {
 			cleanup("fmGetPortAttribute", err);
 			MAT_LOG(DEBUG, "skip port %d\n", port);
 			continue;
@@ -1317,23 +1334,27 @@ int switch_router_init(__u64 router_mac, int update_dmac, int update_smac,
 			continue;
 		}
 
-		if ((err = fmSetPortAttribute(sw, port, FM_PORT_ROUTED_FRAME_UPDATE_FIELDS, &ru)) != FM_OK) {
+		err = fmSetPortAttribute(sw, port, FM_PORT_ROUTED_FRAME_UPDATE_FIELDS, &ru);
+		if (err != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
 		MAT_LOG(DEBUG, "set FM_PORT_ROUTED_FRAME_UPDATE_FIELDS for port %d to 0x%08x\n", port, ru);
 
-		if ((err = fmSetPortAttribute(sw, port, FM_PORT_UPDATE_TTL, &rt)) != FM_OK) {
+		err = fmSetPortAttribute(sw, port, FM_PORT_UPDATE_TTL, &rt);
+		if (err != FM_OK) {
 			return cleanup("fmSetPortAttribute", err);
 		}
 		MAT_LOG(DEBUG, "set FM_PORT_UPDATE_TTL for port %d to %d\n", port, rt);
 	}
 
-	if ((err = fmSetRouterAttribute(sw, FM_ROUTER_PHYSICAL_MAC_ADDRESS, (void *)&router_mac)) != FM_OK) {
+	err = fmSetRouterAttribute(sw, FM_ROUTER_PHYSICAL_MAC_ADDRESS, (void *)&router_mac);
+	if (err != FM_OK) {
 		return cleanup("fmSetRouterAttribute", err);
 	}
 	MAT_LOG(DEBUG, "set default router mac to 0x%012llx\n", router_mac);
 
-	if ((err = fmSetRouterState(sw, 0, FM_ROUTER_STATE_ADMIN_UP)) != FM_OK) {
+	err = fmSetRouterState(sw, 0, FM_ROUTER_STATE_ADMIN_UP);
+	if (err != FM_OK) {
 		return cleanup("fmSetRouterState", err);
 	}
 	MAT_LOG(DEBUG, "bring up the default router\n");
@@ -1567,7 +1588,8 @@ int switch_get_rule_counters(__u32 ruleid, __u32 switch_table_id,
 	fm_status err = FM_OK;
 	fm_flowCounters counters;
 
-	if ((err = fmGetFlowCount(sw, (int)switch_table_id, (int)ruleid, &counters)) != FM_OK) {
+	err = fmGetFlowCount(sw, (int)switch_table_id, (int)ruleid, &counters);
+	if (err != FM_OK) {
 		return cleanup("fmGetFlowCount", err);
 	}
 #ifdef DEBUG
@@ -1708,11 +1730,13 @@ int switch_del_mac_entry(int vlan, __u64 mac)
 
 	MAT_LOG(DEBUG, "reading mac table before ...\n");
 
-	if ((entries = malloc(sizeof(fm_macAddressEntry) * FM_MAX_ADDR)) == NULL) {
+	entries = malloc(sizeof(fm_macAddressEntry) * FM_MAX_ADDR);
+	if (entries == NULL) {
 		MAT_LOG(ERR, "err allocating space for mac table.\n");
 		return -ENOMEM;
 	}
-	if ((err = fmGetAddressTable(sw, &nEntries, entries)) != FM_OK) {
+	err = fmGetAddressTable(sw, &nEntries, entries);
+	if (err != FM_OK) {
 		free(entries);
 		return cleanup("fmAddAddress", err);
 	}
@@ -1734,14 +1758,16 @@ int switch_del_mac_entry(int vlan, __u64 mac)
 #ifdef DEBUG
 	MAT_LOG(DEBUG, "deleting mac entry vlan %d address 0x%012llx \n", vlan, mac);
 #endif /* DEBUG */
-	if ((err = fmDeleteAddress(sw, &macEntry)) != FM_OK) {
+	err = fmDeleteAddress(sw, &macEntry);
+	if (err != FM_OK) {
 		return cleanup("fmAddAddress", err);
 	}
 
 #ifdef DEBUG
 	MAT_LOG(DEBUG, "reading mac table after ...\n");
 
-	if ((err = fmGetAddressTable(sw, &nEntries, entries)) != FM_OK) {
+	err = fmGetAddressTable(sw, &nEntries, entries);
+	if (err != FM_OK) {
 		return cleanup("fmAddAddress", err);
 	}
 
@@ -1950,7 +1976,8 @@ int switch_del_TCAM_table(__u32 table_id)
 #ifdef DEBUG
 	MAT_LOG(DEBUG, "%s: deleting rule TCAM table %d\n", __func__, table_id);
 #endif /* DEBUG */
-	if ((err = fmDeleteFlowTCAMTable(sw, (int)table_id)) != FM_OK)
+	err = fmDeleteFlowTCAMTable(sw, (int)table_id);
+	if (err != FM_OK)
 		return cleanup("fmDeleteFlowTCAMTable", err);
 
 	return 0;
@@ -2004,7 +2031,8 @@ int switch_add_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 #ifdef DEBUG
 		MAT_LOG(DEBUG, "%s: creating ecmp group %d\n", __func__, ecmp_group_id);
 #endif /* DEBUG */
-		if ((err = fmCreateECMPGroupV2(sw, &hw_group_id, NULL)) != FM_OK)
+		err = fmCreateECMPGroupV2(sw, &hw_group_id, NULL);
+		if (err != FM_OK)
 			return cleanup("fmDeleteFlowTCAMTable", err);
 		else {
 			ecmp_group[ecmp_group_id].hw_group_id = hw_group_id;
@@ -2028,7 +2056,8 @@ int switch_add_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	MAT_LOG(DEBUG, "%s: adding arp entry (0x%08x:0x%012llx:%u)\n",
 		__func__, arp.ipAddr.addr[0], new_dmac, new_vlan);
 #endif /* DEBUG */
-	if ((err = fmAddARPEntry(sw, &arp)) != FM_OK) {
+	err = fmAddARPEntry(sw, &arp);
+	if (err != FM_OK) {
 		return cleanup("fmAddARPEntry", err);
 		ecmp_group[ecmp_group_id].num_nhs--;
 		return err;
@@ -2044,7 +2073,8 @@ int switch_add_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	MAT_LOG(DEBUG, "%s: adding nh entry (0x%08x:%u) to group %u\n",
 		__func__, nh.addr.addr[0], nh.vlan, ecmp_group_id);
 #endif /* DEBUG */
-	if ((err = fmAddECMPGroupNextHops(sw, ecmp_group[ecmp_group_id].hw_group_id, 1, &nh)) != FM_OK) {
+	err = fmAddECMPGroupNextHops(sw, ecmp_group[ecmp_group_id].hw_group_id, 1, &nh);
+	if (err != FM_OK) {
 		return cleanup("fmAddECMPGroupNextHops", err);
 		ecmp_group[ecmp_group_id].num_nhs--;
 	}
@@ -2057,7 +2087,8 @@ static fm_status switch_search_arp_entry(__u16 vlan, __u64 dmac, fm_arpEntry *pa
 	fm_status err = 0;
 	fm_voidptr ptr;
 
-	if ((err = fmGetARPEntryFirst(sw, &ptr, parp)) != FM_OK) {
+	err = fmGetARPEntryFirst(sw, &ptr, parp);
+	if (err != FM_OK) {
 #ifdef DEBUG
 		MAT_LOG(DEBUG, "%s: fmGetARPEntryFirst() returns %d\n", __func__, err);
 #endif /* DEBUG */
@@ -2112,7 +2143,8 @@ int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	MAT_LOG(DEBUG, "%s: action ROUTE(0x%012llx:%u)\n", __func__, new_dmac, new_vlan);
 #endif /* DEBUG */
 
-	if ((err = switch_search_arp_entry(new_vlan, new_dmac, &arp)) != FM_OK) {
+	err = switch_search_arp_entry(new_vlan, new_dmac, &arp);
+	if (err != FM_OK) {
 		MAT_LOG(ERR, "%s: unable to find arp entry(dmac = 0x%12llx, vlan = %u)\n",
 			__func__, new_dmac, new_vlan);
 		return -ENOENT;
@@ -2122,7 +2154,8 @@ int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	MAT_LOG(DEBUG, "%s: deleting arp entry (0x%08x:0x%012llx:%u)\n",
 		__func__, arp.ipAddr.addr[0], new_dmac, new_vlan);
 #endif /* DEBUG */
-	if ((err = fmDeleteARPEntry(sw, &arp)) != FM_OK) {
+	err = fmDeleteARPEntry(sw, &arp);
+	if (err != FM_OK) {
 		return cleanup("fmDeleteARPEntry", err);
 		return err;
 	}
@@ -2138,7 +2171,8 @@ int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 	MAT_LOG(DEBUG, "%s: deleting nh entry (0x%08x:%u) from group %u\n",
 		__func__, nh.addr.addr[0], nh.vlan, ecmp_group_id);
 #endif /* DEBUG */
-	if ((err = fmDeleteECMPGroupNextHops(sw, hw_group_id, 1, &nh)) != FM_OK)
+	err = fmDeleteECMPGroupNextHops(sw, hw_group_id, 1, &nh);
+	if (err != FM_OK)
 		return cleanup("fmDeleteECMPGroupNextHops", err);
 
 	ecmp_group[ecmp_group_id].num_nhs--;
@@ -2151,7 +2185,8 @@ int switch_del_nh_entry(struct net_mat_field_ref *matches, struct net_mat_action
 #ifdef DEBUG
 		MAT_LOG(DEBUG, "%s: deleting ecmp group %u\n", __func__, ecmp_group_id);
 #endif /* DEBUG */
-		if ((err = fmDeleteECMPGroup(sw, hw_group_id)) != FM_OK)
+		err = fmDeleteECMPGroup(sw, hw_group_id);
+		if (err != FM_OK)
 			return cleanup("fmDeleteECMPGroup", err);
 
 		ecmp_group[ecmp_group_id].hw_group_id = -1;
@@ -2174,22 +2209,26 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 	size_t listeners_size;
 
 	listeners_size = sizeof(fm_mcastGroupListener) * (__u32)num_mcast_listeners;
-	if ((listeners = malloc(listeners_size)) == NULL) {
+	listeners = malloc(listeners_size);
+	if (listeners == NULL) {
 		MAT_LOG(ERR, "%s: unable to allocate listener list\n", __func__);
 		return -ENOMEM;
 	}
 	bzero(listeners, listeners_size);
 
-	if ((err = fmCreateMcastGroup(sw, mcast_group)) != FM_OK) {
+	err = fmCreateMcastGroup(sw, mcast_group);
+	if (err != FM_OK) {
 		cleanup("fmCreateMcastGroup", err);
 
 		goto done;
 	}
 
-	if ((err = fmSetMcastGroupAttribute(sw, *mcast_group, FM_MCASTGROUP_L3_SWITCHING_ONLY, &l3switch_only)) != FM_OK) {
+	err = fmSetMcastGroupAttribute(sw, *mcast_group, FM_MCASTGROUP_L3_SWITCHING_ONLY, &l3switch_only);
+	if (err != FM_OK) {
 		cleanup("fmSetMcastGroupAttribute", err);
 
-		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+		err = fmDeleteMcastGroup(sw, *mcast_group);
+		if (err != FM_OK) {
 			cleanup("fmDeleteMcastGroup", err);
 			goto done;
 		}
@@ -2197,10 +2236,12 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 		goto done;
 	}
 
-	if ((err = fmActivateMcastGroup(sw, *mcast_group)) != FM_OK) {
+	err = fmActivateMcastGroup(sw, *mcast_group);
+	if (err != FM_OK) {
 		cleanup("fmActivateMcastGroup", err);
 
-		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+		err = fmDeleteMcastGroup(sw, *mcast_group);
+		if (err != FM_OK) {
 			cleanup("fmDeleteMcastGroup", err);
 			goto done;
 		}
@@ -2208,15 +2249,18 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 		goto done;
 	}
 
-	if ((err = fmGetMcastGroupPort(sw, *mcast_group, mcast_lport)) != FM_OK) {
+	err = fmGetMcastGroupPort(sw, *mcast_group, mcast_lport);
+	if (err != FM_OK) {
 		cleanup("fmGetMcastGroupPort", err);
 
-		if ((err = fmDeactivateMcastGroup(sw, *mcast_group)) != FM_OK) {
+		err = fmDeactivateMcastGroup(sw, *mcast_group);
+		if (err != FM_OK) {
 			cleanup("fmDeactivateMcastGroup", err);
 			goto done;
 		}
 
-		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+		err = fmDeleteMcastGroup(sw, *mcast_group);
+		if (err != FM_OK) {
 			cleanup("fmDeleteMcastGroup", err);
 			goto done;
 		}
@@ -2248,15 +2292,18 @@ static int switch_construct_mcast_group(fm_int *mcast_lport,
 
 	}
 
-	if ((err = fmAddMcastGroupListenerListV2(sw, *mcast_group, num_mcast_listeners, listeners) != FM_OK)) {
+	err = fmAddMcastGroupListenerListV2(sw, *mcast_group, num_mcast_listeners, listeners);
+	if (err != FM_OK) {
 		cleanup("fmCreateMcastGroup", err);
 
-		if ((err = fmDeactivateMcastGroup(sw, *mcast_group)) != FM_OK) {
+		err = fmDeactivateMcastGroup(sw, *mcast_group);
+		if (err != FM_OK) {
 			cleanup("fmDeactivateMcastGroup", err);
 			goto done;
 		}
 
-		if ((err = fmDeleteMcastGroup(sw, *mcast_group)) != FM_OK) {
+		err = fmDeleteMcastGroup(sw, *mcast_group);
+		if (err != FM_OK) {
 			cleanup("fmDeleteMcastGroup", err);
 			goto done;
 		}
@@ -2728,7 +2775,8 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 
 #ifdef VXLAN_MCAST
 	if (num_mcast_listeners > 1) {
-		if ((err = switch_construct_mcast_group(&mcast_lport, &mcast_group, num_mcast_listeners, mcast_listeners)) < 0) {
+		err = switch_construct_mcast_group(&mcast_lport, &mcast_group, num_mcast_listeners, mcast_listeners);
+		if (err < 0) {
 			MAT_LOG(ERR, "%s: error constructing multicast group %d\n", __func__, err);
 			return err;
 		}
@@ -2743,9 +2791,10 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 	MAT_LOG(DEBUG, "%s: add flow : table %d, cond 0x%llx, act 0x%llx\n",
 		__func__, table_id, cond, act);
 #endif /* DEBUG */
-	if ((err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
-			     cond, &condVal, act, &param, FM_FLOW_STATE_ENABLED,
-			     (int *)flowid)) != FM_OK) {
+	err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
+			cond, &condVal, act, &param, FM_FLOW_STATE_ENABLED,
+			(int *)flowid);
+	if (err != FM_OK) {
 		return cleanup("fmAddFlow", err);
 	}
 #ifdef DEBUG
@@ -2772,7 +2821,8 @@ int switch_del_TCAM_rule_entry(__u32 flowid, __u32 switch_table_id)
 #ifdef DEBUG
 	MAT_LOG(DEBUG, "%s: deleting flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
 #endif /* DEBUG */
-	if ((err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid)) != FM_OK) {
+	err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid);
+	if (err != FM_OK) {
 		return cleanup("fmDeleteFlow", err);
 	}
 
@@ -2782,11 +2832,13 @@ int switch_del_TCAM_rule_entry(__u32 flowid, __u32 switch_table_id)
 
 		match_mcast_group[flowid] = -1;
 
-		if ((err = fmDeactivateMcastGroup(sw, mcast_group)) != FM_OK) {
+		err = fmDeactivateMcastGroup(sw, mcast_group);
+		if (err != FM_OK) {
 			return cleanup("fmDeactivateMcastGroup", err);
 		}
 
-		if ((err = fmDeleteMcastGroup(sw, mcast_group)) != FM_OK) {
+		err = fmDeleteMcastGroup(sw, mcast_group);
+		if (err != FM_OK) {
 			return cleanup("fmDeleteMcastGroup", err);
 		}
 
@@ -2979,7 +3031,8 @@ int switch_del_TE_table(__u32 table_id)
 #ifdef DEBUG
 	MAT_LOG(DEBUG, "%s: deleting flow TE table %d\n", __func__, table_id);
 #endif /* DEBUG */
-	if ((err = fmDeleteFlowTETable(sw, (int)table_id)) != FM_OK)
+	err = fmDeleteFlowTETable(sw, (int)table_id);
+	if (err != FM_OK)
 		return cleanup("fmDeleteFlowTETable", err);
 
 	return 0;
@@ -3282,9 +3335,10 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 	MAT_LOG(DEBUG, "%s: add TE flow : table %d, cond 0x%llx, act 0x%llx\n",
 		__func__, table_id, cond, act);
 #endif /* DEBUG */
-	if ((err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
-			     cond, &condVal, act, &param, FM_FLOW_STATE_ENABLED,
-			     (int *)flowid)) != FM_OK) {
+	err = fmAddFlow(sw, (fm_int)table_id, (fm_uint16)priority, 0,
+			cond, &condVal, act, &param, FM_FLOW_STATE_ENABLED,
+			(int *)flowid);
+	if (err != FM_OK) {
 		return cleanup("fmAddFlow", err);
 	}
 #ifdef DEBUG
@@ -3302,7 +3356,8 @@ int switch_del_TE_rule_entry(__u32 flowid, __u32 switch_table_id)
 #ifdef DEBUG
 	MAT_LOG(DEBUG, "%s: deleting TE flow entry (switch %d, flowid %d)\n", __func__, switch_table_id, flowid);
 #endif /* DEBUG */
-	if ((err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid)) != FM_OK) {
+	err = fmDeleteFlow(sw, (int)switch_table_id, (int)flowid);
+	if (err != FM_OK) {
 		return cleanup("fmDeleteFlow", err);
 	}
 
