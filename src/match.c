@@ -136,6 +136,7 @@ static void match_usage(void)
 	printf("  get_headers       display headers in the pipeline\n");
 	printf("  get_tables        display match action tables\n");
 	printf("  lport_lookup      display pci to logical port maps\n");
+	printf("  phys_port_lookup  display logical port to physical port map\n");
 	printf("  get_ports         display logical port info\n");
 	printf("  set_port          set port attribute\n");
 }
@@ -243,6 +244,13 @@ static void get_lport_usage(void)
 	printf("  pci    is the pci BUS:DEVICE.FUNCTION of the port to lookup\n");
 	printf("  mac    is the MAC Address of the port to lookup\n");
 	printf("Note: Exactly one pci/mac argument is required\n");
+}
+
+static void get_phys_port_usage(void)
+{
+	printf("Usage: %s phys_port_lookup lport <lport>\n", progname);
+	printf("Where:\n");
+	printf("  lport  is the logical port number to convert to physical\n");
 }
 
 static void get_port_usage(void)
@@ -596,6 +604,7 @@ static void(*type_cb[NET_MAT_CMD_MAX+1])(struct match_msg *, int verbose) = {
 	match_cmd_create_table,
 	match_cmd_destroy_table,
 	match_cmd_create_table,
+	match_cmd_get_ports,
 	match_cmd_get_ports,
 	match_cmd_get_ports,
 	match_cmd_set_ports,
@@ -2015,6 +2024,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 {
 	bool have_pci_query = false;
 	bool have_mac_query = false;
+	bool have_lport_query = false;
 	struct net_mat_port port;
 	struct match_msg *msg;
 	struct nlattr *nest0, *nest1;
@@ -2061,6 +2071,21 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				err = 1;
 			}
 			have_mac_query = true;
+		} else if (strcmp(*argv, "lport") == 0) {
+			next_arg();
+
+			if (*argv == NULL) {
+				fprintf(stderr, "Error: missing lport\n");
+				return -EINVAL;
+			}
+
+			err = sscanf(*argv, "%u", &port.port_id);
+			if (err < 0) {
+				fprintf(stderr, "invalid lport parameter\n");
+				get_port_usage();
+				exit(-1);
+			}
+			have_lport_query = true;
 		} else if (strcmp(*argv, "min") == 0) {
 			next_arg();
 			if (*argv == NULL) {
@@ -2091,6 +2116,8 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);
 			if (cmd == NET_MAT_PORT_CMD_GET_LPORT)
 				get_lport_usage();
+			else if (cmd == NET_MAT_PORT_CMD_GET_PHYS_PORT)
+				get_phys_port_usage();
 			else
 				get_port_usage();
 
@@ -2105,9 +2132,15 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 			get_lport_usage();
 			return -EINVAL;
 		}
+	} else if (cmd == NET_MAT_PORT_CMD_GET_PHYS_PORT) {
+		if ((have_pci_query ^ have_mac_query)) {
+			fprintf(stderr, "Unsupported pci/mac argument\n");
+			get_phys_port_usage();
+			return -EINVAL;
+		} else if (!have_lport_query) {
+			fprintf(stderr, "lport is required\n");
+		}
 	}
-
-	port.port_id = 0;
 
 	/* open generic netlink socket with MATCH api */
 	nsd = nl_socket_alloc();
@@ -2157,7 +2190,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		return -EMSGSIZE;
 	}
 
-	if (have_pci_query || have_mac_query) {
+	if (have_pci_query || have_mac_query || have_lport_query) {
 		err = match_put_port(msg->nlbuf, &port);
 		if (err) {
 			fprintf(stderr, "Error: match put port failed\n");
@@ -2539,6 +2572,8 @@ int main(int argc, char **argv)
 		cmd = NET_MAT_TABLE_CMD_DESTROY_TABLE;
 	} else if (strcmp(argv[args], "update") == 0) {
 		cmd = NET_MAT_TABLE_CMD_UPDATE_TABLE;
+	} else if (strcmp(argv[args], "phys_port_lookup") == 0) {
+		cmd = NET_MAT_PORT_CMD_GET_PHYS_PORT;
 	} else if (strcmp(argv[args], "lport_lookup") == 0) {
 		cmd = NET_MAT_PORT_CMD_GET_LPORT;
 	} else if (strcmp(argv[args], "get_ports") == 0) {
@@ -2636,6 +2671,9 @@ int main(int argc, char **argv)
 		match_create_tbl_send(verbose, pid, family, ifindex, argc, argv, cmd);
 		break;
 	case NET_MAT_PORT_CMD_GET_LPORT:
+		match_get_port_send(verbose, pid, family, ifindex, argc, argv, cmd);
+		break;
+	case NET_MAT_PORT_CMD_GET_PHYS_PORT:
 		match_get_port_send(verbose, pid, family, ifindex, argc, argv, cmd);
 		break;
 	case NET_MAT_PORT_CMD_GET_PORTS:
