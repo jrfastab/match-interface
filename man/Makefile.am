@@ -12,6 +12,7 @@ dist_man1_MANS = \
 	match-get_ports.1 \
 	match-get_tables.1 \
 	match-lport_lookup.1 \
+	match-phys_port_lookup.1 \
 	match-set_port.1 \
 	match-set_rule.1 \
 	match-update.1

@@ -1,0 +1,56 @@
+.\" Header and footer
+.TH "MATCH\-PHYS_PORT_LOOKUP" "1" "" "MATCH Tool" "MATCH Manual"
+
+.\" Name and brief description
+.SH "NAME"
+match\-phys_port_lookup \- Lookup a physical port number given a logical port
+
+.\" Options, brief
+.SH SYNOPSIS
+.nf
+\fImatch phys_port_lookup\fR [\-f <family>] [\-p <pid>] [\-g] [\-h] [\-i ifname] [\-s]
+            lport <lport>
+.fi
+
+.\" Detailed description
+.SH DESCRIPTION
+Send a command instructing a match action table (MAT) daemon to lookup and respond with the physical port number associated with a given logical port.
+
+.\" Options, detailed
+.SH OPTIONS
+
+.br
+\-f <family>
+.RS 4
+The netlink family used by the MAT daemon.
+.RE
+
+.br
+\-p <pid>
+.RS 4
+The pid of the MATCH daemon (e.g. `pidof lt-matchd`).
+.RE
+
+.br
+\-g
+.RS 4
+Display graphs in DOT format.
+.RE
+
+.br
+\-i <ifname>
+.RS 4
+Specify interface name (e.g. eth0)
+.RE
+
+.br
+\-s
+.RS 4
+Silence verbose printing
+.RE
+
+.br
+lport <lport>
+.RS 4
+The logical port being mapped to a physical port.
+.RE
