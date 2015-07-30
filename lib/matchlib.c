@@ -822,6 +822,8 @@ void pp_port(FILE *fp, int print,
 	pfprintf(fp, print, " port %u:\n", port->port_id);
 	pfprintf(fp, print, "    state: %s\n", port_state_str(port->state));
 	pfprintf(fp, print, "    speed: %s\n", port_speed_str(port->speed));
+	if (port->port_phys_id)
+		pfprintf(fp, print, "    phys_id: %u\n", port->port_phys_id);
 	if (port->max_frame_size)
 		pfprintf(fp, print, "    max_frame_size: %u\n",
 		         port->max_frame_size);
