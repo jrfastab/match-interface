@@ -963,6 +963,33 @@ static int ies_port_get_lport(struct net_mat_port *port, unsigned int *lport)
 	return err;
 }
 
+static int lport_to_phys_port(unsigned int lport, unsigned int *phys_port)
+{
+	int port_id;
+	int err;
+
+	PROTECT_SWITCH(sw);
+	err = fmMapLogicalPortToPhysical(GET_SWITCH_PTR(sw), (int)lport, &port_id);
+	UNPROTECT_SWITCH(sw);
+
+	if (err)
+		return cleanup(__func__, err);
+
+	*phys_port = (unsigned int) port_id;
+
+	return 0;
+}
+
+static int ies_port_get_phys_port(struct net_mat_port *port, unsigned int *phys_port)
+{
+	int err = -EINVAL;
+
+	if (port->port_id != 0)
+		err = lport_to_phys_port(port->port_id, phys_port);
+
+	return err;
+}
+
 struct match_backend ies_pipeline_backend = {
 	.name = "ies_pipeline",
 	.hdrs = my_header_list,
@@ -981,6 +1008,7 @@ struct match_backend ies_pipeline_backend = {
 	.get_ports = ies_ports_get,
 	.set_ports = ies_ports_set,
 	.get_lport = ies_port_get_lport,
+	.get_phys_port = ies_port_get_phys_port,
 };
 
 MATCH_BACKEND_REGISTER(ies_pipeline_backend)

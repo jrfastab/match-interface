@@ -449,6 +449,7 @@ static struct nla_policy net_mat_named_value_policy[NET_MAT_TABLE_ATTR_VALUE_T_M
 
 static struct nla_policy net_mat_port_policy[NET_MAT_PORT_T_MAX+1] = {
 	[NET_MAT_PORT_T_ID]	= { .type = NLA_U32, },
+	[NET_MAT_PORT_T_PHYS_ID]= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_TYPE]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_STATE]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_SPEED]	= { .type = NLA_U32, },
@@ -2103,6 +2104,9 @@ int match_get_port(FILE *fp, int print, struct nlattr *nlattr,
 	if (p[NET_MAT_PORT_T_ID])
 		port->port_id = nla_get_u32(p[NET_MAT_PORT_T_ID]);
 
+	if (p[NET_MAT_PORT_T_PHYS_ID])
+		port->port_phys_id = nla_get_u32(p[NET_MAT_PORT_T_PHYS_ID]);
+
 	if (p[NET_MAT_PORT_T_TYPE])
 		port->type = nla_get_u32(p[NET_MAT_PORT_T_TYPE]);
 
@@ -2759,6 +2763,9 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p)
 		return -EMSGSIZE;
 
 	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_ID, p->port_id))
+		return -EMSGSIZE;
+
+	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_PHYS_ID, p->port_phys_id))
 		return -EMSGSIZE;
 
 	if ((p->type && nla_put_u32(nlbuf, NET_MAT_PORT_T_TYPE, p->type)) ||

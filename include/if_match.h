@@ -695,6 +695,7 @@ static inline const char *port_speed_str(__u32 i) {
 enum {
 	NET_MAT_PORT_T_UNSPEC,
 	NET_MAT_PORT_T_ID,
+	NET_MAT_PORT_T_PHYS_ID,
 	NET_MAT_PORT_T_TYPE,
 	NET_MAT_PORT_T_STATE,
 	NET_MAT_PORT_T_SPEED,
@@ -717,6 +718,7 @@ enum port_type {
 
 struct net_mat_port {
 	__u32 port_id;
+	__u32 port_phys_id;
 	char *name;
 	enum port_type type;
 	enum port_state state;
@@ -780,6 +782,7 @@ enum {
 
 	NET_MAT_PORT_CMD_GET_PORTS,
 	NET_MAT_PORT_CMD_GET_LPORT,
+	NET_MAT_PORT_CMD_GET_PHYS_PORT,
 	NET_MAT_PORT_CMD_SET_PORTS,
 
 	__NET_MAT_CMD_MAX,

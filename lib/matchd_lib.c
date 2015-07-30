@@ -1638,8 +1638,7 @@ nla_put_failure:
 	return err;
 }
 
-
-static int match_cmd_get_lport(struct nlmsghdr *nlh)
+static int match_cmd_get_port(struct nlmsghdr *nlh, uint8_t cmd)
 {
 	struct nlattr *i, *tb[NET_MAT_MAX+1];
 	struct net_mat_port *ports;
@@ -1648,19 +1647,20 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 	int rem, err = -ENOMSG;
 	unsigned int count = 0;
 
-	if (!backend->get_lport) {
-		MAT_LOG(ERR, "get_lport not supported by backend.\n");
+	if ((cmd == NET_MAT_PORT_CMD_GET_LPORT && !backend->get_lport) ||
+	    (cmd == NET_MAT_PORT_CMD_GET_PHYS_PORT && !backend->get_phys_port)) {
+		MAT_LOG(ERR, "get port not supported by backend.\n");
 		return -EOPNOTSUPP;
 	}
 
 	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
 	if (err) {
-		MAT_LOG(ERR, "Error: Cannot parse get lport request\n");
+		MAT_LOG(ERR, "Error: Cannot parse get port request\n");
 		return -EINVAL;
 	}
 
 	if (!tb[NET_MAT_PORTS]) {
-		MAT_LOG(ERR, "Error: Missing lport port request\n");
+		MAT_LOG(ERR, "Error: Missing port port request\n");
 		return -EINVAL;
 	}
 
@@ -1691,17 +1691,21 @@ static int match_cmd_get_lport(struct nlmsghdr *nlh)
 			return -EINVAL;
 		}
 
-		err = backend->get_lport(&ports[count],
-					 &ports[count].port_id);
+		if (cmd == NET_MAT_PORT_CMD_GET_LPORT)
+			err = backend->get_lport(&ports[count],
+						 &ports[count].port_id);
+		else if (cmd == NET_MAT_PORT_CMD_GET_PHYS_PORT)
+			err = backend->get_phys_port(&ports[count],
+                                                 &ports[count].port_phys_id);
+
 		if (err) {
-			MAT_LOG(ERR, "get_lports failed in backend.\n");
+			MAT_LOG(ERR, "get port failed in backend.\n");
 			free(ports);
 			return err;
 		}
 	}
 
-	nlbuf = match_alloc_msg(nlh, NET_MAT_PORT_CMD_GET_LPORT,
-				NLM_F_REQUEST|NLM_F_ACK, 0);
+	nlbuf = match_alloc_msg(nlh, cmd, NLM_F_REQUEST|NLM_F_ACK, 0);
 	if (!nlbuf) {
 		MAT_LOG(ERR, "Message allocation failed.\n");
 		goto nla_put_failure;
@@ -1722,6 +1726,17 @@ nla_put_failure:
 	nlmsg_free(nlbuf);
 
 	return err;
+}
+
+
+static int match_cmd_get_lport(struct nlmsghdr *nlh)
+{
+	return match_cmd_get_port(nlh, NET_MAT_PORT_CMD_GET_LPORT);
+}
+
+static int match_cmd_get_phys_port(struct nlmsghdr *nlh)
+{
+	return match_cmd_get_port(nlh, NET_MAT_PORT_CMD_GET_PHYS_PORT);
 }
 
 /*
@@ -1790,6 +1805,7 @@ static int(*type_cb[NET_MAT_CMD_MAX+1])(struct nlmsghdr *nlh) = {
 	match_cmd_table,
 	match_cmd_get_ports,
 	match_cmd_get_lport,
+	match_cmd_get_phys_port,
 	match_cmd_set_ports,
 };
 
