@@ -1299,7 +1299,7 @@ int switch_router_init(__u64 router_mac, int update_dmac, int update_smac,
 		ecmp_group[i].num_nhs = 0;
 	}
 
-	memset(l2mp_group, -1, TABLE_L2_MP_SIZE);
+	memset(l2mp_group, -1, sizeof(l2mp_group));
 
 	if (curr_sw)
 		sw = curr_sw;
