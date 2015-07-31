@@ -1003,12 +1003,15 @@ int get_action_arg(int argc, char **argv, bool need_args,
 			type = a->args[i].type;
 			name = a->args[i].name;
 		}
-
-		if (*argv == NULL && !variadic) {
-			fprintf(stderr, "Error: missing action arg. expected `%s %s`\n",
-				net_mat_action_arg_type_str(action->args[i].type),
-				action->args[i].name);
-			return -EINVAL;
+		if (*argv == NULL) {
+			if(variadic) {
+				return ++advance;
+			} else {
+				fprintf(stderr, "Error: missing action arg. expected `%s %s`\n",
+					net_mat_action_arg_type_str(action->args[i].type),
+					action->args[i].name);
+				return -EINVAL;
+			}
 		}
 
 		action->args[i].type = type;
