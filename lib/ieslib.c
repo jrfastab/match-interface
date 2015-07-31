@@ -187,19 +187,19 @@ static int ies_pipeline_del_rules(struct net_mat_rule *rule)
 
 	switch (rule->table_id) {
 	case TABLE_TCAM:
-		MAT_LOG(ERR, "%s: direct rule programing to TABLE_TCAM"
-				" is not supported\n", __func__);
+		MAT_LOG(ERR, "%s: direct rule programming to TABLE_TCAM is not supported\n",
+			__func__);
 		goto done;
 		break;
 #if 0
 	case TABLE_ECMP_GROUP:
-		MAT_LOG(ERR, "%s: rule programing to TABLE_ECMP_GROUP "
-				"is not supported\n", __func__);
+		MAT_LOG(ERR, "%s: rule programming to TABLE_ECMP_GROUP is not supported\n",
+			__func__);
 		err = -EINVAL;
 		break;
 	case TABLE_FORWARD_GROUP:
-		MAT_LOG(ERR, "%s: rule programing to TABLE_FORWARD_GROUP "
-				"is not supported\n", __func__);
+		MAT_LOG(ERR, "%s: rule programming to TABLE_FORWARD_GROUP is not supported\n",
+			__func__);
 		err = -EINVAL;
 		break;
 #endif
@@ -227,8 +227,7 @@ static int ies_pipeline_del_rules(struct net_mat_rule *rule)
 		}
 
 #ifdef DEBUG
-		MAT_LOG(DEBUG, "%s: deleting mac entry vlan %d"
-			" mac %02x:%02x:%02x:%02x:%02x:%02x\n",
+		MAT_LOG(DEBUG, "%s: deleting mac entry vlan %d mac %02x:%02x:%02x:%02x:%02x:%02x\n",
 			__func__, vlan_id, mac[0], mac[1], mac[2], mac[3],
 			mac[4], mac[5]);
 #endif /* DEBUG */
@@ -303,16 +302,14 @@ static int ies_pipeline_set_rules(struct net_mat_rule *rule)
 
 	switch (rule->table_id) {
 	case TABLE_TCAM:
-		MAT_LOG(ERR, "%s: direct rule programing to"
-			" TABLE_TCAM is not supported\n", __func__);
+		MAT_LOG(ERR, "%s: direct rule programming to TABLE_TCAM is not supported\n",
+			__func__);
 		goto done;
-		break;
 	case TABLE_TUNNEL_ENGINE_A:
 	case TABLE_TUNNEL_ENGINE_B:
-		MAT_LOG(ERR, "%s: direct rule programing to"
-			" TABLE_TUNNEL_ENGINE_A or B is not supported\n", __func__);
+		MAT_LOG(ERR, "%s: direct rule programming to TABLE_TUNNEL_ENGINE_A or B is not supported\n",
+			__func__);
 		goto done;
-		break;
 	case TABLE_NEXTHOP:
 		err = switch_add_nh_entry(rule->matches, rule->actions);
 		break;
