@@ -87,6 +87,7 @@ static char tcp_inner_str[] = "tcp_inner";
 static char udp_str[] = "udp";
 static char udp_inner_str[] = "udp_inner";
 static char ingress_port[] = "ingress_port";
+static char ingress_lport[] = "ingress_lport";
 static char metadata_t_str[] = "metadata_t";
 static char egress_port[] = "egress_port";
 static char empty[] = "";
@@ -390,6 +391,7 @@ static struct net_mat_hdr udp = {
 
 enum ies_header_metadata_ids {
 	HEADER_METADATA_INGRESS_PORT = 1,
+	HEADER_METADATA_INGRESS_LPORT,
 	HEADER_METADATA_ECMP_GROUP_ID,
 	HEADER_METADATA_TE_A,
 	HEADER_METADATA_TE_B,
@@ -400,6 +402,9 @@ enum ies_header_metadata_ids {
 static struct net_mat_field metadata_fields[] = {
 	{ .name = ingress_port,
 	  .uid = HEADER_METADATA_INGRESS_PORT,
+	  .bitwidth = 32,},
+	{ .name = ingress_lport,
+	  .uid = HEADER_METADATA_INGRESS_LPORT,
 	  .bitwidth = 32,},
 	{ .name = ecmp_group_id,
 	  .uid = HEADER_METADATA_ECMP_GROUP_ID,
@@ -934,6 +939,11 @@ static struct net_mat_field_ref matches_vni[] = {
 	  .field = HEADER_METADATA_INGRESS_PORT,
 	  .mask_type = NET_MAT_MASK_TYPE_MASK},
 
+	{ .instance = HEADER_INSTANCE_INGRESS_PORT_METADATA,
+	  .header = HEADER_METADATA,
+	  .field = HEADER_METADATA_INGRESS_LPORT,
+	  .mask_type = NET_MAT_MASK_TYPE_MASK},
+
 	{ .instance = 0, .field = 0},
 };
 #endif
@@ -1005,6 +1015,11 @@ static struct net_mat_field_ref matches_tcam[] = {
 	{ .instance = HEADER_INSTANCE_INGRESS_PORT_METADATA,
 	  .header = HEADER_METADATA,
 	  .field = HEADER_METADATA_INGRESS_PORT,
+	  .mask_type = NET_MAT_MASK_TYPE_MASK},
+
+	{ .instance = HEADER_INSTANCE_INGRESS_PORT_METADATA,
+	  .header = HEADER_METADATA,
+	  .field = HEADER_METADATA_INGRESS_LPORT,
 	  .mask_type = NET_MAT_MASK_TYPE_MASK},
 
 	{ .instance = HEADER_INSTANCE_ETHERNET,

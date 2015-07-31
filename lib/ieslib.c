@@ -1874,6 +1874,14 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 			case HEADER_METADATA_INGRESS_PORT:
 				condition |= FM_FLOW_MATCH_SRC_PORT;
 				break;
+			case HEADER_METADATA_INGRESS_LPORT:
+#ifdef FM_FLOW_MATCH_LOGICAL_PORT
+				condition |= FM_FLOW_MATCH_LOGICAL_PORT;
+#else
+				MAT_LOG(ERR, "Please update your IES software to match on logical port\n");
+				err = -EINVAL;
+#endif
+				break;
 			default:
 				MAT_LOG(ERR, "%s: match error in HEADER_METADATA, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
@@ -2541,6 +2549,18 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 #ifdef DEBUG
 				MAT_LOG(DEBUG, "%s: match SRC_PORT(%d)\n", __func__, condVal.logicalPort);
 #endif /* DEBUG */
+				break;
+			case HEADER_METADATA_INGRESS_LPORT:
+#ifdef FM_FLOW_MATCH_LOGICAL_PORT
+				cond |= FM_FLOW_MATCH_LOGICAL_PORT;
+				condVal.logicalPort = (fm_int)matches[i].v.u32.value_u32;
+#ifdef DEBUG
+				MAT_LOG(DEBUG, "%s: match LOGICAL_PORT(%d)\n", __func__, condVal.logicalPort);
+#endif /* DEBUG */
+#else
+				MAT_LOG(ERR, "Please update your IES software to match on logical port\n");
+				err = -EINVAL;
+#endif /* FM_FLOW_MATCH_LOGICAL_PORT */
 				break;
 			default:
 				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_INGRESS_PORT_METADATA, field=%d\n", __func__, matches[i].field);
