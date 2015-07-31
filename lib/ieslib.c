@@ -423,14 +423,18 @@ static int ies_pipeline_update_table(struct net_mat_tbl *tbl)
 	dmac = values_tunnel_engine[IES_VXLAN_DST_MAC].value.u64;
 
 	for (i = 0; tbl->attribs[i].uid; i++) {
-		if (tbl->attribs[i].uid == NET_MAT_TABLE_ATTR_NAMED_VALUE_VXLAN_SRC_MAC) {
+		switch (tbl->attribs[i].uid) {
+		case NET_MAT_TABLE_ATTR_NAMED_VALUE_VXLAN_SRC_MAC:
 			smac = tbl->attribs[i].value.u64;
-		} else if (tbl->attribs[i].uid == NET_MAT_TABLE_ATTR_NAMED_VALUE_VXLAN_DST_MAC) {
+			break;
+		case NET_MAT_TABLE_ATTR_NAMED_VALUE_VXLAN_DST_MAC:
 			dmac = tbl->attribs[i].value.u64;
-		} else if (tbl->attribs[i].uid == NET_MAT_TABLE_ATTR_NAMED_VALUE_MISS_DFLT_EGRESS_PORT) {
+			break;
+		case NET_MAT_TABLE_ATTR_NAMED_VALUE_MISS_DFLT_EGRESS_PORT:
 			dflt_port = tbl->attribs[i].value.u16;
 			have_dflt_port = true;
-		} else {
+			break;
+		default:
 			return -EINVAL;
 		}
 	}
