@@ -2247,7 +2247,7 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 
-			err = sscanf(*argv, "%u", &port.speed);
+			err = sscanf(*argv, "%" SCNu32 "", &port.speed);
 			if (err < 1) {
 				fprintf(stderr, "Error: speed invalid\n");
 				set_port_usage();
