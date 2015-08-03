@@ -45,3 +45,6 @@ nl_get_attr_ex_LDADD = $(abs_top_builddir)/lib/libmatch.la \
 nl_get_attr_ex_CFLAGS = $(AM_CFLAGS) $(IES_CFLAGS) $(CFLAGS)
 nl_get_attr_ex_SOURCES = nl_get_attr_ex.c
 
+
+TESTS = nl_get_attr_ex
+check_PROGRAMS = nl_get_attr_ex
