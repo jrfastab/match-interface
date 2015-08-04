@@ -524,6 +524,7 @@ static int ies_ports_get(struct net_mat_port **ports)
 		fm_bool	pi = FM_DISABLED;
 		fm_bool drop_tagged = FM_DISABLED;
 		fm_bool drop_untagged = FM_DISABLED;
+		fm_int loopback = FM_PORT_LOOPBACK_OFF;
 		fm_int mode, state, info[64];
 		fm_portCounters counter;
 		fm_uint32 speed;
@@ -658,6 +659,25 @@ static int ies_ports_get(struct net_mat_port **ports)
 			continue;
 		}
 
+		err = fmGetPortAttribute(sw, port, FM_PORT_LOOPBACK, &loopback);
+		if (err != FM_OK) {
+			cleanup("fmGetPortAttribute()", err);
+			continue;
+		}
+
+		switch (loopback) {
+		case FM_PORT_LOOPBACK_OFF:
+			p[i].loopback = NET_MAT_PORT_T_FLAG_DISABLED;
+			break;
+		case FM_PORT_LOOPBACK_TX2RX:
+			p[i].loopback = NET_MAT_PORT_T_FLAG_ENABLED;
+			break;
+		default:
+			p[i].loopback = NET_MAT_PORT_T_FLAG_UNSPEC;
+			MAT_LOG(ERR, "Warning: unknown or unsupported loopback value %d\n", loopback);
+			break;
+		}
+
 		p[i].port_id = (__u32)cpi;
 		i++;
 	}
@@ -736,6 +756,7 @@ static int ies_ports_set(struct net_mat_port *ports)
 	fm_switchInfo swInfo;
 	fm_bool drop_tagged = FM_DISABLED;
 	fm_bool drop_untagged = FM_DISABLED;
+	fm_int loopback = FM_PORT_LOOPBACK_OFF;
 	int i, err = 0;
 
 	fmGetSwitchInfo(sw, &swInfo);
@@ -835,6 +856,26 @@ static int ies_ports_set(struct net_mat_port *ports)
 				MAT_LOG(ERR, "Error: SetPortAttribute FM_PORT_DEF_PRI failed!\n");
 				return -EINVAL;
 			}
+		}
+
+		switch (p->loopback) {
+		case NET_MAT_PORT_T_FLAG_UNSPEC:
+			break;
+		case NET_MAT_PORT_T_FLAG_ENABLED:
+			loopback = FM_PORT_LOOPBACK_TX2RX;
+			err = fmSetPortAttribute(sw, port, FM_PORT_LOOPBACK, &loopback);
+			break;
+		case NET_MAT_PORT_T_FLAG_DISABLED:
+			loopback = FM_PORT_LOOPBACK_OFF;
+			err = fmSetPortAttribute(sw, port, FM_PORT_LOOPBACK, &loopback);
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		if (err) {
+			MAT_LOG(ERR, "Error: fmSetPortAttribute FM_PORT_LOOPBACK failed!\n");
+			return -EINVAL;
 		}
 	}
 

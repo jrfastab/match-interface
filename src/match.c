@@ -265,7 +265,8 @@ static void get_port_usage(void)
 static void set_port_usage(void)
 {
 	printf("Usage: %s set_port port NUM [speed NUM] [state NUM] [max_frame_size NUM] "
-	       "[def_vlan NUM] [def_priority NUM] [drop_tagged VAL] [drop_untagged VAL]\n", progname);
+	       "[def_vlan NUM] [def_priority NUM] [drop_tagged VAL] [drop_untagged VAL] "
+	       "[loopback VAL]\n", progname);
 	printf(" state: up down\n"); 
 	printf(" speed: integer speed\n");
 	printf(" max_frame_size: integer maximum frame size\n");
@@ -273,6 +274,7 @@ static void set_port_usage(void)
 	printf(" def_priority: integer port's default VLAN priority (0 - 7)\n");
 	printf(" drop_tagged: dropping tagged frames on ingress (enabled/disabled)\n");
 	printf(" drop_untagged: dropping untagged frames on ingress (enabled/disabled)\n");
+	printf(" loopback: tx2rx loopback on port (enabled/disabled)\n");
 }
 
 static struct nla_policy match_get_tables_policy[NET_MAT_MAX+1] = {
@@ -2359,6 +2361,23 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 
 			if (port.vlan.def_priority > 7) {
 				fprintf(stderr, "Error: default VLAN priority must be in range [0..7]\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+		} else if (strcmp(*argv, "loopback") == 0) {
+			next_arg();
+			if (*argv == NULL) {
+				fprintf(stderr, "Error: missing loopback state\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+
+			if (strcmp(*argv, flag_state_str(NET_MAT_PORT_T_FLAG_ENABLED)) == 0) {
+				port.loopback = NET_MAT_PORT_T_FLAG_ENABLED;
+			} else if (strcmp(*argv, flag_state_str(NET_MAT_PORT_T_FLAG_DISABLED)) == 0) {
+				port.loopback = NET_MAT_PORT_T_FLAG_DISABLED;
+			} else {
+				fprintf(stderr, "Error: invalid loopback state\n");
 				set_port_usage();
 				return -EINVAL;
 			}
