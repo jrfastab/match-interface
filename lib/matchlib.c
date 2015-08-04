@@ -456,6 +456,7 @@ static struct nla_policy net_mat_port_policy[NET_MAT_PORT_T_MAX+1] = {
 	[NET_MAT_PORT_T_MAX_FRAME_SIZE]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_VLAN]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_MAC_ADDR]	= { .type = NLA_U64, },
+	[NET_MAT_PORT_T_GLORT]	= { .type = NLA_U32, },
 	[NET_MAT_PORT_T_PCI]   = { .type = NLA_UNSPEC, .minlen = sizeof(struct net_mat_port_pci)},
 };
 
@@ -832,6 +833,10 @@ void pp_port(FILE *fp, int print,
 	if (port->pci.bus) {
 		pfprintf(fp, print, "    pci: (%x:%x.%x)\n",
 			 port->pci.bus, port->pci.device, port->pci.function);
+	}
+
+	if (port->glort) {
+		pfprintf(fp, print, "    glort: 0x%x\n", port->glort);
 	}
 
 	pp_port_vlan(fp, print, &port->vlan);
@@ -2125,6 +2130,9 @@ int match_get_port(FILE *fp, int print, struct nlattr *nlattr,
 	if (p[NET_MAT_PORT_T_MAC_ADDR])
 		port->mac_addr = nla_get_u64(p[NET_MAT_PORT_T_MAC_ADDR]);
 
+	if (p[NET_MAT_PORT_T_GLORT])
+		port->glort = nla_get_u32(p[NET_MAT_PORT_T_GLORT]);
+
 	if (p[NET_MAT_PORT_T_PCI]) {
 		struct net_mat_port_pci *pci;
 
@@ -2781,6 +2789,9 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p)
 		return -EMSGSIZE;
 
 	if (p->mac_addr && nla_put_u64(nlbuf, NET_MAT_PORT_T_MAC_ADDR, p->mac_addr))
+		return -EMSGSIZE;
+
+	if (p->glort && nla_put_u32(nlbuf, NET_MAT_PORT_T_GLORT, p->glort))
 		return -EMSGSIZE;
 
 	stats = nla_nest_start(nlbuf, NET_MAT_PORT_T_STATS);

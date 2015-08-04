@@ -969,8 +969,9 @@ struct match_msg *match_nl_get_msg(struct nl_sock *nsd, uint8_t cmd, uint32_t pi
 }
 
 static int match_nl_get_port(struct nl_sock *nsd, uint32_t pid,
-		      unsigned int ifindex, int family, uint8_t cmd,
-		      struct net_mat_port *ports, uint32_t *port_id)
+			unsigned int ifindex, int family, uint8_t cmd,
+			struct net_mat_port *ports,
+			uint32_t *port_id, uint32_t *glort)
 {
 	struct net_mat_port *port_query = NULL;
 	struct match_msg *msg;
@@ -1042,6 +1043,9 @@ static int match_nl_get_port(struct nl_sock *nsd, uint32_t pid,
 			*port_id = port_query[0].port_id;
 		else if (cmd == NET_MAT_PORT_CMD_GET_PHYS_PORT)
 			*port_id = port_query[0].port_phys_id;
+
+		if (glort)
+			*glort = port_query[0].glort;
 	}
 
 	match_nl_free_msg(msg);
@@ -1052,7 +1056,7 @@ static int match_nl_get_port(struct nl_sock *nsd, uint32_t pid,
 int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 		      unsigned int ifindex, int family,
 		      uint8_t bus, uint8_t device, uint8_t function,
-		      uint32_t *lport)
+		      uint32_t *lport, uint32_t *glort)
 {
 	struct net_mat_port port = {.pci = {0}, .port_id = 0,
 				    .mac_addr = 0, .port_phys_id = 0};
@@ -1065,14 +1069,15 @@ int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 	ports[0] = port;
 
 	err = match_nl_get_port(nsd, pid, ifindex, family,
-			NET_MAT_PORT_CMD_GET_LPORT, ports, lport);
+			NET_MAT_PORT_CMD_GET_LPORT, ports, lport, glort);
 
 	return err;
 }
 
 int match_nl_mac_lport(struct nl_sock *nsd, uint32_t pid,
 		     unsigned int ifindex, int family,
-		     uint64_t mac, uint32_t *lport)
+		     uint64_t mac, uint32_t *lport,
+		     uint32_t *glort)
 {
 	struct net_mat_port port = {.pci = {0}, .port_id = 0,
 				    .mac_addr = 0, .port_phys_id = 0};
@@ -1083,14 +1088,15 @@ int match_nl_mac_lport(struct nl_sock *nsd, uint32_t pid,
 	ports[0] = port;
 
 	err = match_nl_get_port(nsd, pid, ifindex, family,
-			NET_MAT_PORT_CMD_GET_LPORT, ports, lport);
+			NET_MAT_PORT_CMD_GET_LPORT, ports, lport, glort);
 
 	return err;
 }
 
 int match_nl_lport_to_phys_port(struct nl_sock *nsd, uint32_t pid,
-                                unsigned int ifindex, int family,
-                                uint32_t lport, uint32_t *phys_port)
+				unsigned int ifindex, int family,
+				uint32_t lport, uint32_t *phys_port,
+				uint32_t *glort)
 {
 	struct net_mat_port port = {.pci = {0}, .port_id = 0,
 				    .mac_addr = 0, .port_phys_id = 0};
@@ -1101,7 +1107,8 @@ int match_nl_lport_to_phys_port(struct nl_sock *nsd, uint32_t pid,
 	ports[0] = port;
 
 	err = match_nl_get_port(nsd, pid, ifindex, family,
-			NET_MAT_PORT_CMD_GET_PHYS_PORT, ports, phys_port);
+			NET_MAT_PORT_CMD_GET_PHYS_PORT,
+			ports, phys_port, glort);
 
 	return err;
 }

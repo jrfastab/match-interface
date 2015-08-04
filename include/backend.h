@@ -106,10 +106,12 @@ struct match_backend {
 	int (*set_ports)(struct net_mat_port *ports);
 
 	/* Lookup PCI/MAC function logical port identifier */
-	int (*get_lport)(struct net_mat_port *port, unsigned int *lport);
+	int (*get_lport)(struct net_mat_port *port, unsigned int *lport,
+	                 unsigned int *glort);
 
 	/* Lookup function for physical port identifier */
-	int (*get_phys_port)(struct net_mat_port *port, unsigned int *phys_port);
+	int (*get_phys_port)(struct net_mat_port *port,
+	                     unsigned int *phys_port, unsigned int *glort);
 };
 
 /**

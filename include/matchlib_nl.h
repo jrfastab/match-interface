@@ -136,15 +136,18 @@ match_nl_destroy_table(struct nl_sock *nsd, uint32_t pid,
 }
 
 int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
-		      unsigned int ifindex, int family,
-		      uint8_t bus, uint8_t device, uint8_t function,
-		      uint32_t *lport);
+		unsigned int ifindex, int family,
+		uint8_t bus, uint8_t device, uint8_t function,
+		uint32_t *lport, uint32_t *glort);
 
 int match_nl_mac_lport(struct nl_sock *nsd, uint32_t pid,
-		      unsigned int ifindex, int family,
-		      uint64_t mac, uint32_t *lport);
+		unsigned int ifindex, int family,
+		uint64_t mac, uint32_t *lport,
+		uint32_t *glort);
 
 int match_nl_lport_to_phys_port(struct nl_sock *nsd, uint32_t pid,
-		                unsigned int ifindex, int family,
-		                uint32_t lport, uint32_t *phys_port);
+		unsigned int ifindex, int family,
+		uint32_t lport, uint32_t *phys_port,
+		uint32_t *glort);
+
 #endif

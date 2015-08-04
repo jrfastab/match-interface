@@ -896,7 +896,8 @@ static int pci_to_pep(uint8_t bus)
 	return (int)((buf[5] & 0xf00) >> 8);
 }
 
-static int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function, unsigned int *lport)
+static int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function,
+                        unsigned int *lport,  unsigned int *glort)
 {
 	int err;
 	int index;
@@ -940,14 +941,36 @@ static int pci_to_lport(uint8_t bus, uint8_t device, uint8_t function, unsigned 
 	}
 
 	*lport = (unsigned int)port;
+	if (glort) {
+		err = fmGetLogicalPortGlort(sw, (fm_int)*lport, glort);
+		if (err != FM_OK)
+			return cleanup("fmGetLogicalPortGlort", err);
+	}
 
-	MAT_LOG(DEBUG, "get_lport pci %u:%u.%u lport %d\n",
-	        bus, device, function, *lport);
+	if (glort)
+		MAT_LOG(DEBUG, "get_lport pci %u:%u.%u lport %d glort 0x%x\n",
+		        bus, device, function, *lport, *glort);
+	else
+		MAT_LOG(DEBUG, "get_lport pci %u:%u.%u lport %d\n",
+		        bus, device, function, *lport);
 
 	return 0;
 }
 
-static int mac_to_lport(uint64_t mac, unsigned int *lport)
+static int lport_to_glort(unsigned int lport,  unsigned int *glort)
+{
+	int status = -EINVAL;
+
+	if (glort) {
+		status = fmGetLogicalPortGlort(sw, (fm_int)lport, glort);
+		if (status != FM_OK)
+			return cleanup("fmGetLogicalPortGlort", status);
+	}
+
+	return status;
+}
+
+static int mac_to_lport(uint64_t mac, unsigned int *lport, unsigned int *glort)
 {
 	fm_status err;
 	fm_int nEntries = 0;
@@ -977,6 +1000,17 @@ static int mac_to_lport(uint64_t mac, unsigned int *lport)
 
 		if (mac == hw_addr) {
 			*lport = (unsigned int)port;
+
+			if (glort) {
+				err = fmGetLogicalPortGlort(sw, (fm_int)*lport,
+				                            glort);
+				if (err != FM_OK) {
+					free(entries);
+					return cleanup("fmGetLogicalPortGlort",
+					               err);
+				}
+			}
+
 			free(entries);
 			return 0;
 		}
@@ -986,20 +1020,26 @@ static int mac_to_lport(uint64_t mac, unsigned int *lport)
 	return -ENOENT;
 }
 
-static int ies_port_get_lport(struct net_mat_port *port, unsigned int *lport)
+static int ies_port_get_lport(struct net_mat_port *port,
+                              unsigned int *lport, unsigned int *glort)
 {
 	int err = -EINVAL;
 
 	if (port->pci.bus != 0)
 		err = pci_to_lport(port->pci.bus, port->pci.device,
-					port->pci.function, lport);
+		                   port->pci.function, lport, glort);
 	else if (port->mac_addr != 0)
-		err = mac_to_lport(port->mac_addr, lport);
+		err = mac_to_lport(port->mac_addr, lport, glort);
+	else if (port->port_id != 0) {
+		*lport = port->port_id;
+		err = lport_to_glort(port->port_id, glort);
+	}
 
 	return err;
 }
 
-static int lport_to_phys_port(unsigned int lport, unsigned int *phys_port)
+static int lport_to_phys_port(unsigned int lport, unsigned int *phys_port,
+                              unsigned int *glort)
 {
 	int port_id;
 	int err;
@@ -1008,20 +1048,27 @@ static int lport_to_phys_port(unsigned int lport, unsigned int *phys_port)
 	err = fmMapLogicalPortToPhysical(GET_SWITCH_PTR(sw), (int)lport, &port_id);
 	UNPROTECT_SWITCH(sw);
 
-	if (err)
-		return cleanup(__func__, err);
+	if (err != FM_OK)
+		return cleanup("fmMapLogicalPortToPhysical", err);
+
+	if (glort) {
+		err = fmGetLogicalPortGlort(sw, (fm_int)lport, glort);
+		if (err != FM_OK)
+			return cleanup("fmGetLogicalPortGlort", err);
+	}
 
 	*phys_port = (unsigned int) port_id;
 
 	return 0;
 }
 
-static int ies_port_get_phys_port(struct net_mat_port *port, unsigned int *phys_port)
+static int ies_port_get_phys_port(struct net_mat_port *port,
+                                  unsigned int *phys_port, unsigned int *glort)
 {
 	int err = -EINVAL;
 
 	if (port->port_id != 0)
-		err = lport_to_phys_port(port->port_id, phys_port);
+		err = lport_to_phys_port(port->port_id, phys_port, glort);
 
 	return err;
 }
@@ -1681,6 +1728,7 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	int lport = -1;
 	__u32 group;
 	int i;
+	unsigned int glort = 0;
 
 	for (i = 0; matches && matches[i].instance; i++) {
 		switch (matches[i].instance) {
@@ -1750,7 +1798,7 @@ switch_add_mac_entry(struct net_mat_field_ref *matches,
 	}
 
 	if (vsi_found) {
-		err = ies_port_get_lport(&port, (unsigned int *)&lport);
+		err = ies_port_get_lport(&port, (unsigned int *)&lport, &glort);
 		if (err) {
 			MAT_LOG(ERR, "Error: pci to log port\n");
 			return -EINVAL;
@@ -2699,7 +2747,8 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			port.pci.function = actions[i].args[2].v.value_u8;
 
 			err = ies_port_get_lport(&port,
-			                         (__u32 *)&param.logicalPort);
+			                         (__u32 *)&param.logicalPort,
+			                         NULL);
 			if (err) {
 				MAT_LOG(ERR, "Error: pci to log port\n");
 				err = -EINVAL;

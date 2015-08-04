@@ -35,6 +35,7 @@ int main(void)
 	struct net_mat_tbl *tables;
 	struct net_mat_port *ports;
 	uint32_t phys_port_id = 0;
+	uint32_t glort = 0;
 	int err;
 
 	nsd = match_nl_get_socket();
@@ -173,14 +174,13 @@ int main(void)
 	free(ports);
 
 	err = match_nl_lport_to_phys_port(nsd, pid, 0, family, 4122,
-	                                  &phys_port_id);
+	                                  &phys_port_id, &glort);
 	if (err) {
 		fprintf(stderr, "Error: lport_to_phys_port failed\n");
 		return -EINVAL;
-	} else {
+	} else
 		printf("Logical Port %d is Physical Port %d\n",
 		        4122, phys_port_id);
-	}
 
 	return 0;
 }
