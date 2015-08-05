@@ -69,6 +69,15 @@ The match tool that interacts with matchd.
 %postun
 /sbin/ldconfig
 
+%post matchd
+%systemd_post matchd.service
+
+%preun matchd
+%systemd_preun matchd.service
+
+%postun matchd
+%systemd_postun_with_restart matchd.service
+
 %files
 %{_libdir}/libmatch-*.so
 %{_libdir}/libmatchd-*.so
@@ -85,6 +94,8 @@ The match tool that interacts with matchd.
 
 %files matchd
 %{_sbindir}/matchd
+%{_unitdir}/matchd.service
+%{_sysconfdir}/default/matchd
 
 %files tools
 %{_sbindir}/match

@@ -81,6 +81,7 @@ AC_CONFIG_FILES([
 Makefile lib/Makefile man/Makefile src/Makefile tests/nl/Makefile
 dist/match-interface.pc
 dist/matchd-api.pc
+dist/matchd.service
 dist/match-interface.spec])
 AC_OUTPUT
 

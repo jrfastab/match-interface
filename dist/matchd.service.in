@@ -1,0 +1,12 @@
+[Unit]
+Description=Match Interface Daemon
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/ies/environment
+EnvironmentFile=/etc/default/matchd
+ExecStart=@SBINDIR@/matchd $MATCHD_OPTIONS
+
+[Install]
+WantedBy=multi-user.target
