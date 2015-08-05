@@ -52,6 +52,7 @@ void mat_syslog_file(int level __attribute__((unused)), const char *format,
                      va_list args)
 {
 	vfprintf(logger.stream, format, args);
+	fflush(logger.stream);
 }
 
 void mat_closelog_file(void)
