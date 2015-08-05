@@ -204,6 +204,7 @@ int main(int argc, char **argv)
 
 	sig_act.sa_handler = matchd_int_handler;
 	sigaction(SIGINT, &sig_act, NULL);
+	sigaction(SIGTERM, &sig_act, NULL);
 
 	while (1) {
 		MAT_LOG(DEBUG, "Waiting for message\n");
