@@ -1693,10 +1693,12 @@ static int match_cmd_get_port(struct nlmsghdr *nlh, uint8_t cmd)
 
 		if (cmd == NET_MAT_PORT_CMD_GET_LPORT)
 			err = backend->get_lport(&ports[count],
-						 &ports[count].port_id);
+			                         &ports[count].port_id,
+			                         &ports[count].glort);
 		else if (cmd == NET_MAT_PORT_CMD_GET_PHYS_PORT)
 			err = backend->get_phys_port(&ports[count],
-                                                 &ports[count].port_phys_id);
+						&ports[count].port_phys_id,
+						&ports[count].glort);
 
 		if (err) {
 			MAT_LOG(ERR, "get port failed in backend.\n");
