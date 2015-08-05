@@ -40,6 +40,7 @@ Makefile
 match-interface.pc
 match-interface.spec
 matchd-api.pc
+matchd.service
 match
 matchd
 tests/nl/nl_get_attr_ex
