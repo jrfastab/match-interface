@@ -2676,15 +2676,19 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			case HEADER_TCP_SRC_PORT:
 				cond |= FM_FLOW_MATCH_L4_SRC_PORT;
 				condVal.L4SrcStart = matches[i].v.u16.value_u16;
+				condVal.L4SrcMask = matches[i].v.u16.mask_u16;
 #ifdef DEBUG
-				MAT_LOG(DEBUG, "%s: match L4_SRC_PORT(%d)\n", __func__, condVal.L4SrcStart);
+				MAT_LOG(DEBUG, "%s: match L4_SRC_PORT(%d/0x%04x)\n", __func__,
+					condVal.L4SrcStart, condVal.L4SrcMask);
 #endif /* DEBUG */
 				break;
 			case HEADER_TCP_DST_PORT:
 				cond |= FM_FLOW_MATCH_L4_DST_PORT;
 				condVal.L4DstStart = matches[i].v.u16.value_u16;
+				condVal.L4DstMask = matches[i].v.u16.mask_u16;
 #ifdef DEBUG
-				MAT_LOG(DEBUG, "%s: match L4_DST_PORT(%d)\n", __func__, condVal.L4DstStart);
+				MAT_LOG(DEBUG, "%s: match L4_DST_PORT(%d/0x%04x)\n", __func__,
+                                        condVal.L4DstStart, condVal.L4DstMask);
 #endif /* DEBUG */
 				break;
 			default:
