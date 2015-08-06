@@ -48,6 +48,34 @@ AM_CONDITIONAL([FMIESLIBS], [test "x$IESLIBS" != x])
 
 CFLAGS="$CFLAGS -Wl,--no-as-needed"
 
+AC_ARG_ENABLE(
+    [systemd],
+    AC_HELP_STRING(
+        [--disable-systemd],
+        [Disable systemd integration]
+    ),
+    [enable_systemd=${enableval}]
+)
+AM_CONDITIONAL(SYSTEMD, test "${enable_systemd}" != no)
+
+AC_ARG_WITH(
+    [systemdsystemunitdir],
+    AC_HELP_STRING(
+        [--with-systemdsystemunitdir=DIR],
+        [Path to the systemd system unit directory]
+    ),
+    [path_systemunitdir=${withval}]
+)
+if ( test "${enable_systemd}" != "no" && test -z "${path_systemunitdir}"); then
+    AC_MSG_CHECKING([systemd system unit dir])
+    path_systemunitdir="`$PKG_CONFIG systemd --variable=systemdsystemunitdir`"
+    if (test -z "${path_systemunitdir}"); then
+        AC_MSG_ERROR([systemd system unit directory is required with systemd])
+    fi
+    AC_MSG_RESULT([${path_systemunitdir}])
+fi
+AC_SUBST(SYSTEMD_SYSTEMUNITDIR, [${path_systemunitdir}])
+
 AC_CONFIG_FILES([
 Makefile lib/Makefile man/Makefile src/Makefile tests/nl/Makefile
 dist/match-interface.pc
