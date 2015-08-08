@@ -68,7 +68,7 @@ struct my_mcast_listener {
 };
 #endif /* VXLAN_MCAST */
 
-int switch_init(int one_vlan);
+int switch_init(bool one_vlan);
 
 void switch_close(void);
 

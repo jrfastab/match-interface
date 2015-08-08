@@ -1321,7 +1321,7 @@ ies_log(fm_text buf, fm_voidptr cookie1 __attribute__((unused)),
 	MAT_LOG(DEBUG, "%s", buf);
 }
 
-int switch_init(int one_vlan)
+int switch_init(bool one_vlan)
 {
 	fm_status       err = 0;
 	fm_timestamp    wait = { 3, 0 };
