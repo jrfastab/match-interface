@@ -268,7 +268,7 @@ static void set_port_usage(void)
 {
 	printf("Usage: %s set_port port NUM [speed NUM] [state NUM] [max_frame_size NUM] "
 	       "[def_vlan NUM] [def_priority NUM] [drop_tagged VAL] [drop_untagged VAL] "
-	       "[loopback VAL]\n", progname);
+	       "[loopback VAL] [vlans VLAN[,VLAN...]\n", progname);
 	printf(" state: up down\n"); 
 	printf(" speed: integer speed\n");
 	printf(" max_frame_size: integer maximum frame size\n");
@@ -277,6 +277,7 @@ static void set_port_usage(void)
 	printf(" drop_tagged: dropping tagged frames on ingress (enabled/disabled)\n");
 	printf(" drop_untagged: dropping untagged frames on ingress (enabled/disabled)\n");
 	printf(" loopback: tx2rx loopback on port (enabled/disabled)\n");
+	printf(" vlans: set vlan membership set\n");
 }
 
 static struct nla_policy match_get_tables_policy[NET_MAT_MAX+1] = {
@@ -2416,6 +2417,33 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				fprintf(stderr, "Error: invalid loopback state\n");
 				set_port_usage();
 				return -EINVAL;
+			}
+		} else if (strcmp(*argv, "vlans") == 0) {
+			char *vlan;
+
+			next_arg();
+			vlan = strtok(*argv, ",");
+
+			if (!vlan) {
+				fprintf(stderr, "Error: missing `vlan` value\n");
+				set_port_usage();
+				return -EINVAL;
+			}
+
+			while (vlan) {
+				int vid, slot;
+				__u8 index;
+
+				err = sscanf(vlan, "%i", &vid);
+				if (err < 1) {
+					fprintf(stderr, "Error: invalid `vlan` input: %s\n", vlan);
+				}
+
+				slot = (vid / 8);
+				index = (__u8) (vid % 8);
+
+				port.vlan.vlan_membership_bitmask[slot] |= (__u8)(1 << index);
+				vlan = strtok(NULL, ",");
 			}
 		} else {
 			fprintf(stderr, "Error: unexpected argument `%s`\n", *argv);

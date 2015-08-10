@@ -33,6 +33,7 @@
 #include <linux/netlink.h>
 
 #define PRINT_GRAPHVIZ 2
+#define MAX_VLAN 4096
 
 #define __unused __attribute__((__unused__))
 

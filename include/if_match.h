@@ -313,6 +313,7 @@ struct net_mat_port_vlan {
 	__u32 def_priority;
 	enum flag_state drop_tagged;
 	enum flag_state drop_untagged;
+	__u8 vlan_membership_bitmask[512];
 };
 
 enum {
@@ -619,6 +620,7 @@ enum {
 	NET_MAT_PORT_T_VLAN_DROP_TAGGED,
 	NET_MAT_PORT_T_VLAN_DROP_UNTAGGED,
 	NET_MAT_PORT_T_VLAN_DEF_PRIORITY,
+	NET_MAT_PORT_T_VLAN_MEMBERSHIP,
 	__NET_MAT_PORT_T_VLAN_MAX,
 };
 #define NET_MAT_PORT_T_VLAN_MAX (__NET_MAT_PORT_T_VLAN_MAX - 1)

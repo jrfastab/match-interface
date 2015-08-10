@@ -818,6 +818,31 @@ static void pp_port_vlan(FILE *fp, int print, struct net_mat_port_vlan *v)
 		pfprintf(fp, print, "        drop tagged: %s\n", flag_state_str(v->drop_tagged));
 	if (v->drop_untagged)
 		pfprintf(fp, print, "        drop untagged: %s\n", flag_state_str(v->drop_untagged));
+	if (v->vlan_membership_bitmask) {
+		int i;
+		bool is_trunk = true;
+
+		pfprintf(fp, print, "        vlan membership: ");
+		for (i = 0; i < MAX_VLAN; i++) {
+			int slot = (i / 8);
+
+			if (v->vlan_membership_bitmask[slot] != 0xff) {
+				if (slot == 0  && v->vlan_membership_bitmask[slot] == 0xfe)
+					continue;
+				is_trunk = false;
+				break;
+			}
+		}
+
+		for (i = 0; !is_trunk && i < MAX_VLAN; i++) {
+			int slot = (i / 8);
+			__u8 index = (__u8) (i % 8);
+			if ((v->vlan_membership_bitmask[slot] >> index)	& 0x01) {
+				pfprintf(fp, print, "%i ", i);
+}
+		}
+		pfprintf(fp, print, "%s\n", is_trunk ? "trunk" : "");
+	}
 }
 
 void pp_port(FILE *fp, int print,
@@ -2103,6 +2128,24 @@ static int match_get_port_vlan(FILE *fp __unused, int print __unused,
 	if (p[NET_MAT_PORT_T_VLAN_DEF_PRIORITY])
 		vlan->def_priority = nla_get_u32(p[NET_MAT_PORT_T_VLAN_DEF_PRIORITY]);
 
+	if (p[NET_MAT_PORT_T_VLAN_MEMBERSHIP]) {
+		const struct nlattr *attr = p[NET_MAT_PORT_T_VLAN_MEMBERSHIP];
+		__u8 *data;
+
+		if (nla_len(attr) < (MAX_VLAN / 8)) {
+			MAT_LOG(ERR, "%s: length error expected %i got %i\n", __func__, MAX_VLAN / 8, nla_len(attr));
+			return -NLE_RANGE;
+		}
+
+		if (nla_type(attr) != NET_MAT_PORT_T_VLAN_MEMBERSHIP) {
+			MAT_LOG(ERR, "%s: unexpected type %i\n", __func__, nla_type(attr));
+			return -EINVAL;
+		}
+
+		data = nla_data(p[NET_MAT_PORT_T_VLAN_MEMBERSHIP]);
+		memcpy(vlan->vlan_membership_bitmask, data, MAX_VLAN / 8);
+	}
+
 	return 0;
 }
 
@@ -2845,6 +2888,9 @@ int match_put_port(struct nl_msg *nlbuf, struct net_mat_port *p)
 		return -EMSGSIZE;
 
 	if (nla_put_u32(nlbuf, NET_MAT_PORT_T_VLAN_DEF_PRIORITY, p->vlan.def_priority))
+		return -EMSGSIZE;
+
+	if (nla_put(nlbuf, NET_MAT_PORT_T_VLAN_MEMBERSHIP,  512, p->vlan.vlan_membership_bitmask))
 		return -EMSGSIZE;
 
 	nla_nest_end(nlbuf, stats);
