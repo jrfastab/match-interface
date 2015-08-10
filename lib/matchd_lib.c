@@ -1207,6 +1207,39 @@ match_set_dyn_tbl_actions(struct net_mat_tbl *table,
 	return 0;
 }
 
+/*
+ * Verify the requested mask type is valid
+ *
+ * A field supporting the NET_MAT_MASK_TYPE_MASK type can also take
+ * the NET_MAT_MASK_TYPE_EXACT type. All other mask types need to match
+ * the expected type.
+ *
+ * @param exp
+ *   The expected mask type.
+ * @param req
+ *   The requested mask type.
+ *
+ * @return 0 on success or -EINVAL if the requested mask type is invalid.
+ */
+static int match_check_field_mask(__u32 exp, __u32 req)
+{
+	switch (exp) {
+	case NET_MAT_MASK_TYPE_MASK:
+		if (req == NET_MAT_MASK_TYPE_EXACT ||
+		    req == NET_MAT_MASK_TYPE_MASK)
+			return 0;
+		else
+			return -EINVAL;
+	case NET_MAT_MASK_TYPE_LPM:
+		return (req == NET_MAT_MASK_TYPE_LPM) ? 0 : -EINVAL;
+	case NET_MAT_MASK_TYPE_EXACT:
+		return (req == NET_MAT_MASK_TYPE_EXACT) ? 0 : -EINVAL;
+	case NET_MAT_MASK_TYPE_UNSPEC:
+	default:
+		return -EINVAL;
+	}
+}
+
 /* verify that new table specifies valid match masks */
 static int match_check_field_masks(struct net_mat_tbl *table,
                                    struct net_mat_tbl *new_table)
@@ -1218,9 +1251,9 @@ static int match_check_field_masks(struct net_mat_tbl *table,
 		for (j = 0; table->matches[j].instance; ++j) {
 			if (new_table->matches[i].instance ==
 			    table->matches[j].instance) {
-				if (new_table->matches[i].mask_type !=
-				    table->matches[j].mask_type)
-					return -EINVAL;
+				return match_check_field_mask(
+				          table->matches[j].mask_type,
+				          new_table->matches[i].mask_type);
 			}
 		}
 	}
