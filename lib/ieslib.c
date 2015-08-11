@@ -2703,6 +2703,12 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 			case HEADER_METADATA_INGRESS_PORT:
 				cond |= FM_FLOW_MATCH_SRC_PORT;
 				condVal.logicalPort = (fm_int)matches[i].v.u32.value_u32;
+				if (fmMapCardinalPort(sw, condVal.logicalPort,
+				                      NULL, NULL) != FM_OK) {
+					MAT_LOG(ERR, "Invalid ingress port (%d)\n",
+					        condVal.logicalPort);
+					err = -EINVAL;
+				}
 #ifdef DEBUG
 				MAT_LOG(DEBUG, "%s: match SRC_PORT(%d)\n", __func__, condVal.logicalPort);
 #endif /* DEBUG */
