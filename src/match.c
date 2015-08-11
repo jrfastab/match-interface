@@ -546,6 +546,35 @@ match_cmd_destroy_table(struct match_msg *msg, int verbose __unused)
 }
 
 static void
+match_cmd_get_lport(struct match_msg *msg, int verbose __unused)
+{
+	struct nlmsghdr *nlh = msg->msg;
+	struct nlattr *tb[NET_MAT_MAX+1];
+	struct net_mat_port *port = NULL;
+	int err;
+
+	err = genlmsg_parse(nlh, 0, tb, NET_MAT_MAX, match_get_tables_policy);
+	if (err < 0) {
+		fprintf(stderr, "Warning: unable to parse get ports msg\n");
+		return;
+	}
+
+	err = match_nl_table_cmd_to_type(stdout, false, NET_MAT_PORTS, tb);
+	if (err)
+		return;
+
+	if (tb[NET_MAT_PORTS]) {
+		err = match_get_ports(stdout, false, tb[NET_MAT_PORTS], &port);
+		if (err)
+			fprintf(stderr, "Warning: unable to parse get ports\n");
+		else
+			fprintf(stdout, "Logical Port: %d\n", port->port_id);
+
+		free(port);
+	}
+}
+
+static void
 match_cmd_get_ports(struct match_msg *msg, int verbose __unused)
 {
 	struct nlmsghdr *nlh = msg->msg;
@@ -594,22 +623,22 @@ match_cmd_set_ports(struct match_msg *msg, int verbose __unused)
 }
 
 static void(*type_cb[NET_MAT_CMD_MAX+1])(struct match_msg *, int verbose) = {
-	match_cmd_get_tables,
-	match_cmd_get_headers,
-	match_cmd_get_actions,
-	match_cmd_get_headers_graph,
-	match_cmd_get_table_graph,
-	match_cmd_get_rules,
-	match_cmd_set_rules,
-	match_cmd_del_rules,
-	match_cmd_update_rules,
-	match_cmd_create_table,
-	match_cmd_destroy_table,
-	match_cmd_create_table,
-	match_cmd_get_ports,
-	match_cmd_get_ports,
-	match_cmd_get_ports,
-	match_cmd_set_ports,
+	[NET_MAT_TABLE_CMD_GET_TABLES]        = match_cmd_get_tables,
+	[NET_MAT_TABLE_CMD_GET_HEADERS]       = match_cmd_get_headers,
+	[NET_MAT_TABLE_CMD_GET_ACTIONS]       = match_cmd_get_actions,
+	[NET_MAT_TABLE_CMD_GET_HDR_GRAPH]     = match_cmd_get_headers_graph,
+	[NET_MAT_TABLE_CMD_GET_TABLE_GRAPH]   = match_cmd_get_table_graph,
+	[NET_MAT_TABLE_CMD_GET_RULES]         = match_cmd_get_rules,
+	[NET_MAT_TABLE_CMD_SET_RULES]         = match_cmd_set_rules,
+	[NET_MAT_TABLE_CMD_DEL_RULES]         = match_cmd_del_rules,
+	[NET_MAT_TABLE_CMD_UPDATE_RULES]      = match_cmd_update_rules,
+	[NET_MAT_TABLE_CMD_CREATE_TABLE]      = match_cmd_create_table,
+	[NET_MAT_TABLE_CMD_DESTROY_TABLE]     = match_cmd_destroy_table,
+	[NET_MAT_TABLE_CMD_UPDATE_TABLE]      = match_cmd_create_table,
+	[NET_MAT_PORT_CMD_GET_PORTS]          = match_cmd_get_ports,
+	[NET_MAT_PORT_CMD_GET_LPORT]          = match_cmd_get_lport,
+	[NET_MAT_PORT_CMD_GET_PHYS_PORT]      = match_cmd_get_ports,
+	[NET_MAT_PORT_CMD_SET_PORTS]          = match_cmd_set_ports,
 };
 
 void process_rx_message(int verbose)
