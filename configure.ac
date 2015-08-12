@@ -1,4 +1,4 @@
-AC_INIT([match-interface], [0.0.1])
+AC_INIT([match-interface], [0.0.0-dev])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
