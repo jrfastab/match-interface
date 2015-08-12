@@ -141,7 +141,6 @@ int main(int argc, char **argv)
 	struct nl_sock *nsd;
 	int family = NET_MAT_DFLT_FAMILY;
 	struct sockaddr_nl dest_addr;
-	size_t rcv_size = 2048;
 	unsigned char *buf;
 	int rc = EXIT_SUCCESS;
 	int err, opt;
@@ -223,7 +222,7 @@ int main(int argc, char **argv)
 	while (1) {
 		MAT_LOG(DEBUG, "Waiting for message\n");
 		rc = nl_recv(nsd, &dest_addr, &buf, NULL);
-		if(rc < 0) {
+		if(rc <= 0) {
 			printf("%s:receive error on netlink socket:%d\n",
 				__func__, errno);
 			rc = EXIT_FAILURE;
@@ -236,7 +235,8 @@ int main(int argc, char **argv)
 		if (err < 0)
 			MAT_LOG(ERR, "%s: Warning: parsing error\n",
 					__func__);
-		memset(buf, 0, rcv_size);
+
+		free(buf);
 	}
 	
 	matchd_uninit();
