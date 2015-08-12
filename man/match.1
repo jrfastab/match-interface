@@ -8,7 +8,7 @@ match \- A command line utility to interact with a MATCH daemon (matchd)
 .\" Options, brief
 .SH SYNOPSIS
 .nf
-\fImatch\fR [\-f <family>] [\-p <pid>] [\-g] [\-h] [\-i ifname] [\-s]
+\fImatch\fR [\-f <family>] [\-p <pid>] [\-g] [\-h] [\-i ifname] [\-s] [\-\-version]
      <command> [<args>]
 .fi
 
@@ -50,6 +50,12 @@ Specify interface name (e.g. eth0)
 \-s
 .RS 4
 Silence verbose printing
+.RE
+
+.br
+\-\-version
+.RS 4
+Display Match interface version number and exit.
 .RE
 
 .\" Commands

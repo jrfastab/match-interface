@@ -56,6 +56,7 @@
 #include "if_match.h"
 #include "matchlib.h"
 #include "matchlib_nl.h"
+#include "match_version.h"
 
 #ifdef PRIx64
 #undef PRIx64
@@ -122,6 +123,7 @@ static void match_usage(void)
 	printf("  -i IFNAME  interface name (e.g. eth0)\n");
 	printf("  -p PID     pid of userspace match daemon\n");
 	printf("  -s         silence verbose printing\n");
+	printf("  --version  display Match interface version and exit\n");
 	printf("\n");
 	printf("Commands:\n");
 	printf("  create            create a match action table\n");
@@ -2536,6 +2538,11 @@ int main(int argc, char **argv)
 	int opt;
 	int args = 1;
 	char *ifname = NULL;
+	int opt_index = 0;
+	static struct option long_options[] = {
+		{ "version", no_argument, NULL, 0 },
+		{ 0, 0, 0, 0}
+	};
 
 	progname = argv[0];
 	if (argc < 2) {
@@ -2543,8 +2550,15 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	while ((opt = getopt(argc, argv, "i:p:f:hsg")) != -1) {
+	while ((opt = getopt_long(argc, argv, "i:p:f:hsg", long_options,
+	                          &opt_index)) != -1) {
 		switch (opt) {
+		case 0:
+			if (!strcmp(long_options[opt_index].name, "version")) {
+				printf("Match Version: %s\n", match_version());
+				exit(0);
+			}
+			break;
 		case 'h':
 			match_usage();
 			exit(-1);
@@ -2573,6 +2587,9 @@ int main(int argc, char **argv)
 			verbose = 0;
 			args++;
 			break;
+		default:
+			match_usage();
+			exit(-1);
 		}
 	}
 
