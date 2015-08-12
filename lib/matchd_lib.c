@@ -912,6 +912,12 @@ static int match_cmd_resolve_rules(struct net_mat_rule *rule, int cmd,
 		unsigned int table = rule[i].table_id;
 		struct net_mat_rule *rules;
 
+		if (table >= MAX_MOCK_TABLES) {
+			MAT_LOG(ERR, "Invalid table %i\n", table);
+			err = -EINVAL;
+			goto skip_add;
+		}
+
 		if (!matchd_mock_tables[table]) {
 			MAT_LOG(ERR, "Warning, invalid rule table %i\n",
 				table);
