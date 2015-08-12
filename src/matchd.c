@@ -55,12 +55,13 @@
 #include "matchd_lib.h"
 #include "backend.h"
 #include "matlog.h"
+#include "match_version.h"
 
 #define DEFAULT_BACKEND_NAME "ies_pipeline"
 
 static void matchd_usage(void)
 {
-	MAT_LOG(ERR, "matchd [-b backend] [-f family_id] [-h] [-l] [-s]\n");
+	MAT_LOG(ERR, "matchd [-b backend] [-f family_id] [-h] [-l] [-s] [-v[v]]\n");
 	MAT_LOG(ERR, "Options:\n");
 	MAT_LOG(ERR, "  -b backend    name of backend to load (default: %s)\n", DEFAULT_BACKEND_NAME);
 	MAT_LOG(ERR, "  -d            run as a daemon\n");
@@ -70,6 +71,7 @@ static void matchd_usage(void)
 	MAT_LOG(ERR, "  -s            add all ports to default vlan (ies_pipeline only)\n");
 	MAT_LOG(ERR, "  -v            be verbose (enable info messages)\n");
 	MAT_LOG(ERR, "  -vv           be very verbose (enable info+debug messages)\n");
+	MAT_LOG(ERR, "  --version     display Match interface version and exit\n");
 }
 
 static int matchd_create_pid(void)
@@ -147,11 +149,23 @@ int main(int argc, char **argv)
 	struct switch_args sw_args;
 	struct sigaction sig_act;
 	int verbose = 0;
+	int opt_index = 0;
+	static struct option long_options[] = {
+		{ "version", no_argument, NULL, 0 },
+		{ 0, 0, 0, 0}
+	};
 
 	memset(&sw_args, 0, sizeof(sw_args));
 
-	while ((opt = getopt(argc, argv, "b:f:vhls")) != -1) {
+	while ((opt = getopt_long(argc, argv, "b:f:vhls", long_options,
+	                          &opt_index)) != -1) {
 		switch (opt) {
+		case 0:
+			if (!strcmp(long_options[opt_index].name, "version")) {
+				printf("Match Version: %s\n", match_version());
+				exit(0);
+			}
+			break;
 		case 'b':
 			backend = optarg;
 			break;
