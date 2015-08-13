@@ -45,6 +45,22 @@ nl_get_attr_ex_LDADD = $(abs_top_builddir)/lib/libmatch.la \
 nl_get_attr_ex_CFLAGS = $(AM_CFLAGS) $(IES_CFLAGS) $(CFLAGS)
 nl_get_attr_ex_SOURCES = nl_get_attr_ex.c
 
+sbin_PROGRAMS += nl_vxlan_encap_decap_add
+nl_vxlan_encap_decap_add_LDADD = $(abs_top_builddir)/lib/libmatch.la \
+             $(abs_top_builddir)/lib/libmatchies.la \
+             $(abs_top_builddir)/lib/libmatchd.la \
+             $(IES_LIBS)
+nl_vxlan_encap_decap_add_CFLAGS = $(AM_CFLAGS) $(IES_CFLAGS) $(CFLAGS)
+nl_vxlan_encap_decap_add_SOURCES = nl_vxlan_encap_decap_add.c
 
-TESTS = nl_get_attr_ex
-check_PROGRAMS = nl_get_attr_ex
+sbin_PROGRAMS += nl_vxlan_encap_decap_remove
+nl_vxlan_encap_decap_remove_LDADD = $(abs_top_builddir)/lib/libmatch.la \
+             $(abs_top_builddir)/lib/libmatchies.la \
+             $(abs_top_builddir)/lib/libmatchd.la \
+             $(IES_LIBS)
+nl_vxlan_encap_decap_remove_CFLAGS = $(AM_CFLAGS) $(IES_CFLAGS) $(CFLAGS)
+nl_vxlan_encap_decap_remove_SOURCES = nl_vxlan_encap_decap_remove.c
+
+
+TESTS = nl_get_attr_ex nl_vxlan_encap_decap_add nl_vxlan_encap_decap_remove
+check_PROGRAMS = nl_get_attr_ex nl_vxlan_encap_decap_add nl_vxlan_encap_decap_remove
