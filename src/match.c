@@ -2076,7 +2076,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 				return -EINVAL;
 			}
 
-			ret = sscanf(*argv, "%" SCNu8 ":%" SCNu8 ".%" SCNu8 "",
+			ret = sscanf(*argv, "%" SCNx8 ":%" SCNx8 ".%" SCNu8 "",
 				     &port.pci.bus, &port.pci.device, &port.pci.function);
 
 			if (ret != 3) {
