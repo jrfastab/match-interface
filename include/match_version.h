@@ -30,7 +30,21 @@
 
 #include <string.h>
 
-/* All version macros need to be kept in sync with configure.ac */
+/* All version macros need to be kept in sync with the
+ * AC_INIT macro in configure.ac.
+ *
+ * Note: there should be no hyphens in the version number
+ * to be compatible with rpmbuild.
+ *
+ * The following conventions should be followed for versioning.
+ *
+ * 0.0.0dev    Development on 0.0.0
+ * 0.0.1rc1    Release Candidate 1
+ * 0.0.1rc2    Release Candidate 2
+ * ...
+ * 0.0.1       Release 0.0.1
+ * 0.0.1dev    Development on 0.0.1
+ */
 #define MATCH_VER_MAJOR  0
 #define MATCH_VER_MINOR  0
 #define MATCH_VER_LEVEL  0
@@ -49,11 +63,11 @@
 
 /*
  * SUFFIX can be
- *   "-dev" - for development versions
+ *   "dev" - for development versions
  *   ""     - for released versions
- *   "-rc"  - for release candidates
+ *   "rc"  - for release candidates
  */
-#define MATCH_VER_SUFFIX "-dev"
+#define MATCH_VER_SUFFIX "dev"
 
 #define MATCH_VER_NUM(a,b,c,d) ((a) << 24 | (b) << 16 | (c) << 8 | (d))
 
