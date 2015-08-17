@@ -44,3 +44,5 @@ matchd.service
 match
 matchd
 tests/nl/nl_get_attr_ex
+tests/nl/nl_vxlan_encap_decap_add
+tests/nl/nl_vxlan_encap_decap_remove
