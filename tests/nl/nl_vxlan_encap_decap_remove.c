@@ -203,9 +203,9 @@ int main(void)
 	printf("\n");
 
 
-	/*destroy decap table */
+	/* Destroy decap table */
 	printf("destroy decap & encap tables\n");
-	printf("---------------------------\n");
+	printf("----------------------------\n");
 	memset(&te_vxlan_decap, 0, sizeof(te_vxlan_decap));
 	te_vxlan_decap.name = strdup("te-vxlan-decap");
 	te_vxlan_decap.uid = 31;
@@ -220,10 +220,11 @@ int main(void)
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_decap);
+	free(te_vxlan_decap.name);
 	printf("\n");
 
 
-	/* Destroy encap  table */
+	/* Destroy encap table */
 	memset(&te_vxlan_encap, 0, sizeof(te_vxlan_encap));
 	te_vxlan_encap.name = strdup("te-vxlan-encap");
 	te_vxlan_encap.uid = 30;
@@ -238,6 +239,7 @@ int main(void)
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_encap);
+	free(te_vxlan_encap.name);
 	printf("\n");
 
 	/* Destroy TCAM table */
@@ -255,6 +257,7 @@ int main(void)
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &tcam_to_te);
+	free(tcam_to_te.name);
 	printf("\n");
 	free(tables);
 	free(actions);
