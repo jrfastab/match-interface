@@ -281,7 +281,7 @@ int main(void)
 	printf("encap & decap tables\n");
 	printf("--------------------\n");
 	/* Create TCAM table */
-	//tcam_to_te.name =  strndup("tcam-to-te", NET_MAT_MAXNAME);
+	memset(&tcam_to_te, 0, sizeof(tcam_to_te));
 	tcam_to_te.name =  strdup("tcam-to-te");
 	tcam_to_te.uid = 20; /* API defined */
 	tcam_to_te.source = TCAM_TBL;
@@ -302,7 +302,8 @@ int main(void)
 	free(tcam_to_te.name);
 	printf("\n");
 
-	/* Create encap	 table */
+	/* Create encap table */
+	memset(&te_vxlan_encap, 0, sizeof(te_vxlan_encap));
 	te_vxlan_encap.name = strdup("te-vxlan-encap");
 	te_vxlan_encap.uid = 30;
 	te_vxlan_encap.source = TE_TBL_A;
@@ -324,6 +325,7 @@ int main(void)
 	printf("\n");
 
 	/* Create decap table */
+	memset(&te_vxlan_decap, 0, sizeof(te_vxlan_decap));
 	te_vxlan_decap.name = strdup("te-vxlan-decap");
 	te_vxlan_decap.uid = 31;
 	te_vxlan_decap.source = TE_TBL_A;
@@ -349,6 +351,7 @@ int main(void)
 	printf("decap rules\n");
 	printf("-----------\n");
 	/* Set decap rules */
+	memset(&te_vxlan_decap, 0, sizeof(te_vxlan_decap));
 	te_vxlan_decap_r.table_id = 31; /* 'table' in the match-tool */
 	te_vxlan_decap_r.uid = 1;         /* 'handle' in the match-tool */
 	te_vxlan_decap_r.priority = PRIO;
@@ -368,6 +371,7 @@ int main(void)
 	printf("\n");
 
 
+	memset(&tcam_to_te_decap_a, 0, sizeof(tcam_to_te_decap_a));
 	tcam_to_te_decap_a.table_id = 20;
 	tcam_to_te_decap_a.uid = 5;
 	tcam_to_te_decap_a.priority = PRIO;
@@ -385,6 +389,7 @@ int main(void)
 	printf("\n");
 
 
+	memset(&tcam_to_te_decap_b, 0, sizeof(tcam_to_te_decap_b));
 	tcam_to_te_decap_b.table_id = 20;
 	tcam_to_te_decap_b.uid = 4;
 	tcam_to_te_decap_b.priority = PRIO;
@@ -409,6 +414,7 @@ int main(void)
 	printf("encap rules\n");
 	printf("-----------\n");
 	/* Set encap rules */
+	memset(&te_vxlan_encap_a, 0, sizeof(te_vxlan_encap_a));
 	te_vxlan_encap_a.table_id = 30;
 	te_vxlan_encap_a.uid = 1;
 	te_vxlan_encap_a.priority = PRIO;
@@ -426,6 +432,7 @@ int main(void)
 	printf("\n");
 
 
+	memset(&te_vxlan_encap_b, 0, sizeof(te_vxlan_encap_b));
 	te_vxlan_encap_b.table_id = 30;
 	te_vxlan_encap_b.uid = 2;
 	te_vxlan_encap_b.priority = PRIO;
@@ -446,6 +453,7 @@ int main(void)
 	printf("\n");
 
 
+	memset(&tcam_to_te_encap_a, 0, sizeof(tcam_to_te_encap_a));
 	tcam_to_te_encap_a.table_id = 20;
 	tcam_to_te_encap_a.uid = 1;
 	tcam_to_te_encap_a.priority = PRIO;
@@ -463,6 +471,7 @@ int main(void)
 	printf("\n");
 
 
+	memset(&tcam_to_te_encap_b, 0, sizeof(tcam_to_te_encap_b));
 	tcam_to_te_encap_b.table_id = 20;
 	tcam_to_te_encap_b.uid = 2;
 	tcam_to_te_encap_b.priority = PRIO;
