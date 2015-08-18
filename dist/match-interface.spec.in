@@ -131,9 +131,11 @@ The match tool that interacts with matchd.
 %files tools
 %{_sbindir}/match
 %{_mandir}/*
-%exclude %{_sbindir}/nl_get_attr_ex
+%exclude %{_sbindir}/nl_*
 
 %changelog
+* Mon Aug 17 2015 Jef Oliver <jef.oliver@intel.com>
+- Update SPEC to exclude all nl_ test programs.
 * Wed Aug 05 2015 Jef Oliver <jef.oliver@intel.com>
 - Update SPEC to support better modularization of packaging
 * Thu Jul 16 2015 Jef Oliver <jef.oliver@intel.com>
