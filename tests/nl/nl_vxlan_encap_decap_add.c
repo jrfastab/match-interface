@@ -56,7 +56,7 @@ int main(void)
 	struct net_mat_tbl *tables, tcam_to_te, te_vxlan_encap, te_vxlan_decap;
 	struct net_mat_rule te_vxlan_decap_r, tcam_to_te_decap_a, tcam_to_te_decap_b,
 			    te_vxlan_encap_a, te_vxlan_encap_b, tcam_to_te_encap_a, tcam_to_te_encap_b;
-	int err;
+	int err, i;
 
 
 	struct net_mat_field_ref  tcam_to_te_matches[] = {
@@ -299,6 +299,7 @@ int main(void)
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &tcam_to_te);
+	free(tcam_to_te.name);
 	printf("\n");
 
 	/* Create encap	 table */
@@ -319,6 +320,7 @@ int main(void)
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_encap);
+	free(te_vxlan_encap.name);
 	printf("\n");
 
 	/* Create decap table */
@@ -339,6 +341,7 @@ int main(void)
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_decap);
+	free(te_vxlan_decap.name);
 	printf("\n");
 
 
@@ -360,6 +363,8 @@ int main(void)
 		free(headers);
 		return -EINVAL;
 	}
+	for (i = 0; te_vxlan_decap_action[i].name; i++)
+		free(te_vxlan_decap_action[i].name);
 	printf("\n");
 
 
@@ -394,6 +399,9 @@ int main(void)
 		free(headers);
 		return -EINVAL;
 	}
+	for (i = 0; tcam_to_te_decap_action[i].name; i++)
+		free(tcam_to_te_decap_action[i].name);
+
 	printf("\n");
 
 
@@ -432,6 +440,9 @@ int main(void)
 		free(headers);
 		return -EINVAL;
 	}
+	for (i = 0; te_vxlan_encap_action[i].name; i++)
+		free(te_vxlan_encap_action[i].name);
+
 	printf("\n");
 
 
@@ -466,6 +477,9 @@ int main(void)
 		free(headers);
 		return -EINVAL;
 	}
+	for (i = 0; tcam_to_te_encap_action[i].name; i++)
+		free(tcam_to_te_encap_action[i].name);
+
 	printf("\n");
 
 	free(tables);
