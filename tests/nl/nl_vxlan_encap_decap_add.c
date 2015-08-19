@@ -296,6 +296,7 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		free(tcam_to_te.name);
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &tcam_to_te);
@@ -318,6 +319,7 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		free(te_vxlan_encap.name);
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_encap);
@@ -340,6 +342,7 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		free(te_vxlan_decap.name);
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_decap);
@@ -364,6 +367,8 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		for (i = 0; te_vxlan_decap_action[i].name; i++)
+			free(te_vxlan_decap_action[i].name);
 		return -EINVAL;
 	}
 	for (i = 0; te_vxlan_decap_action[i].name; i++)
@@ -384,6 +389,8 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		for (i = 0; tcam_to_te_decap_action[i].name; i++)
+			free(tcam_to_te_decap_action[i].name);
 		return -EINVAL;
 	}
 	printf("\n");
@@ -402,6 +409,8 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		for (i = 0; tcam_to_te_decap_action[i].name; i++)
+			free(tcam_to_te_decap_action[i].name);
 		return -EINVAL;
 	}
 	for (i = 0; tcam_to_te_decap_action[i].name; i++)
@@ -427,6 +436,8 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		for (i = 0; te_vxlan_encap_action[i].name; i++)
+			free(te_vxlan_encap_action[i].name);
 		return -EINVAL;
 	}
 	printf("\n");
@@ -445,6 +456,8 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		for (i = 0; te_vxlan_encap_action[i].name; i++)
+			free(te_vxlan_encap_action[i].name);
 		return -EINVAL;
 	}
 	for (i = 0; te_vxlan_encap_action[i].name; i++)
@@ -466,6 +479,8 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		for (i = 0; tcam_to_te_encap_action[i].name; i++)
+			free(tcam_to_te_encap_action[i].name);
 		return -EINVAL;
 	}
 	printf("\n");
@@ -484,6 +499,8 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		for (i = 0; tcam_to_te_encap_action[i].name; i++)
+			free(tcam_to_te_encap_action[i].name);
 		return -EINVAL;
 	}
 	for (i = 0; tcam_to_te_encap_action[i].name; i++)
