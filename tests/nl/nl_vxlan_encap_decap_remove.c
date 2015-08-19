@@ -217,6 +217,7 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		free(te_vxlan_decap.name);
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_decap);
@@ -236,6 +237,7 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		free(te_vxlan_encap.name);
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &te_vxlan_encap);
@@ -254,6 +256,7 @@ int main(void)
 		free(actions);
 		free(hdr_gph_node);
 		free(headers);
+		free(tcam_to_te.name);
 		return -EINVAL;
 	}
 	pp_table(stdout, true, &tcam_to_te);
