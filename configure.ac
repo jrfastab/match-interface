@@ -82,5 +82,25 @@ dist/match-interface.pc
 dist/matchd-api.pc
 dist/matchd.service
 dist/match-interface.spec])
+
+dnl Enable/disable documentation build
+AC_ARG_ENABLE([doc],
+    AS_HELP_STRING(
+        [--enable-doc],
+        [Build API documentation (default: no)]),
+    [case "${enableval}" in
+        yes) doc=yes ;;
+        no)  doc=no ;;
+        *)   AC_MSG_ERROR([invalid value ${enableval} for --enable-doc]);;
+     esac], [doc=no])
+AM_CONDITIONAL([BUILD_DOC], [test x$doc = xyes])
+
+dnl Check for doxygen
+AC_CHECK_PROGS([DOXYGEN], [doxygen])
+AS_IF([test -z "$DOXYGEN" && test x$doc = xyes],
+      [AC_MSG_FAILURE(Cannot build documentation without doxygen)])
+
+AS_IF([test x$doc = xyes], AC_CONFIG_FILES([doc/doxyfile doc/Makefile]))
+
 AC_OUTPUT
 

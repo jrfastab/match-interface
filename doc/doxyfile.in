@@ -1,0 +1,12 @@
+PROJECT_NAME           = "Match Action Tables Configuration and Headers"
+PROJECT_NUMBER         = @MATCH_INTERFACE_VERSION@
+INPUT                  = @top_builddir@/include
+FILE_PATTERNS          = nofiles
+FULL_PATH_NAMES        = NO
+HIDE_UNDOC_MEMBERS     = YES
+HIDE_UNDOC_CLASSES     = YES
+JAVADOC_AUTOBRIEF      = YES
+OPTIMIZE_OUTPUT_FOR_C  = YES
+GENERATE_HTML          = YES
+HTML_OUTPUT            = api
+GENERATE_LATEX         = NO
