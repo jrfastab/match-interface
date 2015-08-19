@@ -38,16 +38,16 @@
  *
  * The following conventions should be followed for versioning.
  *
- * 0.0.0dev    Development on 0.0.0
- * 0.0.1rc1    Release Candidate 1
- * 0.0.1rc2    Release Candidate 2
- * ...
- * 0.0.1       Release 0.0.1
  * 0.0.1dev    Development on 0.0.1
+ * 0.0.2rc1    Release Candidate 1
+ * 0.0.2rc2    Release Candidate 2
+ * ...
+ * 0.0.2       Release 0.0.2
+ * 0.0.2dev    Development on 0.0.2
  */
 #define MATCH_VER_MAJOR  0
 #define MATCH_VER_MINOR  0
-#define MATCH_VER_LEVEL  0
+#define MATCH_VER_LEVEL  1
 
 /*
  * EXTRA can be
