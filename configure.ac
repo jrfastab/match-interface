@@ -100,7 +100,7 @@ AC_CHECK_PROGS([DOXYGEN], [doxygen])
 AS_IF([test -z "$DOXYGEN" && test x$doc = xyes],
       [AC_MSG_FAILURE(Cannot build documentation without doxygen)])
 
-AS_IF([test x$doc = xyes], AC_CONFIG_FILES([doc/doxyfile doc/Makefile]))
+AC_CONFIG_FILES([doc/doxyfile doc/Makefile])
 
 AC_OUTPUT
 
