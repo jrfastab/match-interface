@@ -1585,6 +1585,9 @@ match_create_tbl_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		exit(-1);
 	}
 
+	if (!table.name && cmd == NET_MAT_TABLE_CMD_UPDATE_TABLE)
+		table.name = table_names(table.uid);
+
 	if (!table.size && cmd == NET_MAT_TABLE_CMD_CREATE_TABLE) {
 		fprintf(stderr, "Error: size is required\n");
 		create_usage();
