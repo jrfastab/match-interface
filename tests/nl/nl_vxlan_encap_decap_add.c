@@ -354,7 +354,7 @@ int main(void)
 	printf("decap rules\n");
 	printf("-----------\n");
 	/* Set decap rules */
-	memset(&te_vxlan_decap, 0, sizeof(te_vxlan_decap));
+	memset(&te_vxlan_decap_r, 0, sizeof(te_vxlan_decap_r));
 	te_vxlan_decap_r.table_id = 31; /* 'table' in the match-tool */
 	te_vxlan_decap_r.uid = 1;         /* 'handle' in the match-tool */
 	te_vxlan_decap_r.priority = PRIO;
