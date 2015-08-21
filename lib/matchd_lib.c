@@ -1137,8 +1137,10 @@ match_set_dyn_tbl_matches(struct net_mat_tbl *table,
 	for (i = 0; new_table->matches[i].instance; ++i) {
 		found = false;
 		for (j = 0; table->matches[j].instance; ++j) {
-			if (new_table->matches[i].instance ==
-			    table->matches[j].instance) {
+			if ((new_table->matches[i].instance ==
+			     table->matches[j].instance) &&
+			    (new_table->matches[i].field ==
+			     table->matches[j].field)) {
 				found = true;
 				break;
 			}
