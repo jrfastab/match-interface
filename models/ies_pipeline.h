@@ -984,6 +984,11 @@ static struct net_mat_field_ref matches_tunnel_engine[] = {
 
 	{ .instance = HEADER_INSTANCE_IPV4,
 	  .header = HEADER_IPV4,
+	  .field = HEADER_IPV4_PROTOCOL,
+	  .mask_type = NET_MAT_MASK_TYPE_EXACT},
+
+	{ .instance = HEADER_INSTANCE_IPV4,
+	  .header = HEADER_IPV4,
 	  .field = HEADER_IPV4_SRC_IP,
 	  .mask_type = NET_MAT_MASK_TYPE_EXACT},
 

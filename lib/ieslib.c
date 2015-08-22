@@ -3071,6 +3071,9 @@ int switch_create_TE_table(int te, __u32 table_id, struct net_mat_field_ref *mat
 			case HEADER_IPV4_DST_IP:
 				condition |= FM_FLOW_MATCH_DST_IP;
 				break;
+			case HEADER_IPV4_PROTOCOL:
+				condition |= FM_FLOW_MATCH_PROTOCOL;
+				break;
 			default:
 				MAT_LOG(ERR, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
@@ -3341,6 +3344,14 @@ int switch_add_TE_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, stru
 				MAT_LOG(DEBUG, "%s: match DST_IP(0x%08x:0x%08x)\n", __func__, condVal.dstIp.addr[0], condVal.dstIpMask.addr[0]);
 #endif /* DEBUG */
 
+				break;
+			case HEADER_IPV4_PROTOCOL:
+				cond |= FM_FLOW_MATCH_PROTOCOL;
+				condVal.protocol = (fm_byte)matches[i].v.u8.value_u8;
+				condVal.protocolMask = (fm_byte)matches[i].v.u8.mask_u8;
+#ifdef DEBUG
+				MAT_LOG(DEBUG, "%s: match PROTOCOL(0x%08x:0x%08x)\n", __func__, condVal.protocol, condVal.protocolMask);
+#endif /* DEBUG */
 				break;
 			default:
 				MAT_LOG(ERR, "%s: match error in HEADER_INSTANCE_IPV4, field=%d\n", __func__, matches[i].field);
