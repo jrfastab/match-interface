@@ -1058,7 +1058,8 @@ int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 		      uint8_t bus, uint8_t device, uint8_t function,
 		      uint32_t *lport, uint32_t *glort)
 {
-	struct net_mat_port port = {.pci = {0}, .port_id = 0,
+	struct net_mat_port port = {.pci = {0},
+	                            .port_id = NET_MAT_PORT_ID_UNSPEC,
 				    .mac_addr = 0, .port_phys_id = 0};
 	struct net_mat_port ports[2] = {{0}, {0}};
 	int err;
@@ -1079,7 +1080,8 @@ int match_nl_mac_lport(struct nl_sock *nsd, uint32_t pid,
 		     uint64_t mac, uint32_t *lport,
 		     uint32_t *glort)
 {
-	struct net_mat_port port = {.pci = {0}, .port_id = 0,
+	struct net_mat_port port = {.pci = {0},
+	                            .port_id = NET_MAT_PORT_ID_UNSPEC,
 				    .mac_addr = 0, .port_phys_id = 0};
 	struct net_mat_port ports[2] = {{0}, {0}};
 	int err;
@@ -1098,7 +1100,8 @@ int match_nl_lport_to_phys_port(struct nl_sock *nsd, uint32_t pid,
 				uint32_t lport, uint32_t *phys_port,
 				uint32_t *glort)
 {
-	struct net_mat_port port = {.pci = {0}, .port_id = 0,
+	struct net_mat_port port = {.pci = {0},
+	                            .port_id = NET_MAT_PORT_ID_UNSPEC,
 				    .mac_addr = 0, .port_phys_id = 0};
 	struct net_mat_port ports[2] = {{0}, {0}};
 	int err;

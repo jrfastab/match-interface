@@ -514,11 +514,12 @@ static int ies_ports_get(struct net_mat_port **ports)
 
 	fmGetSwitchInfo(sw, &swInfo);
 
-	p = calloc((size_t)swInfo.numCardPorts + 1, sizeof(struct net_mat_port));
+	/* two extra ports, one for cpu port and one for null terminator */
+	p = calloc((size_t)swInfo.numCardPorts + 2, sizeof(struct net_mat_port));
 	if (!p)
 		return -ENOMEM;
 
-	for (i = 0, cpi = 1 ; cpi < swInfo.numCardPorts ; cpi++)  {
+	for (i = 0, cpi = 0 ; cpi < swInfo.numCardPorts ; cpi++)  {
 		fm_int err;
 		fm_int port;
 		fm_bool	pi = FM_DISABLED;
@@ -682,6 +683,9 @@ static int ies_ports_get(struct net_mat_port **ports)
 		i++;
 	}
 
+	/* terminate the port list */
+	p[i].port_id = NET_MAT_PORT_ID_UNSPEC;
+
 	*ports = p;
 
 	return 0;
@@ -761,7 +765,8 @@ static int ies_ports_set(struct net_mat_port *ports)
 
 	fmGetSwitchInfo(sw, &swInfo);
 
-	for (p = &ports[0], i = 0 ; p->port_id > 0; p = &ports[i], i++)  {
+	for (p = &ports[0], i = 0; p->port_id != NET_MAT_PORT_ID_UNSPEC;
+	     p = &ports[i], i++) {
 		fm_int port = (int)p->port_id;
 
 		switch (p->state) {
@@ -1071,7 +1076,7 @@ static int ies_port_get_lport(struct net_mat_port *port,
 		                   port->pci.function, lport, glort);
 	else if (port->mac_addr != 0)
 		err = mac_to_lport(port->mac_addr, lport, glort);
-	else if (port->port_id != 0) {
+	else if (port->port_id != NET_MAT_PORT_ID_UNSPEC) {
 		*lport = port->port_id;
 		err = lport_to_glort(port->port_id, glort);
 	}
@@ -1108,7 +1113,7 @@ static int ies_port_get_phys_port(struct net_mat_port *port,
 {
 	int err = -EINVAL;
 
-	if (port->port_id != 0)
+	if (port->port_id != NET_MAT_PORT_ID_UNSPEC)
 		err = lport_to_phys_port(port->port_id, phys_port, glort);
 
 	return err;

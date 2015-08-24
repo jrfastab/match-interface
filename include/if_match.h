@@ -718,6 +718,8 @@ enum port_type {
 	__NET_MAT_PORT_TYPE_MAX,
 };
 
+#define NET_MAT_PORT_ID_UNSPEC ~(0U)
+
 struct net_mat_port {
 	__u32 port_id;
 	__u32 port_phys_id;

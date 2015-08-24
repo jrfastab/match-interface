@@ -856,7 +856,7 @@ void pp_ports(FILE *fp, int print, struct net_mat_port *ports)
         if (!print)
                 return;
 
-        for (i = 0; ports[i].port_id; i++)
+        for (i = 0; ports[i].port_id != NET_MAT_PORT_ID_UNSPEC; i++)
                 pp_port(fp, print, &ports[i]);
 }
 
@@ -2191,6 +2191,9 @@ int match_get_ports(FILE *fp, int print, struct nlattr *nl,
 			goto out;
 	}
 
+	/* terminate the list */
+	ports[cnt].port_id = NET_MAT_PORT_ID_UNSPEC;
+
 	if (p)
 		*p = ports;
 	else
@@ -2854,7 +2857,8 @@ int match_put_ports(struct nl_msg *nlbuf,
 	if (!ports)
 		return -EMSGSIZE;
 
-	for (i = 0; (p[i].port_id > 0) || (p[i].pci.bus > 0) || (p[i].mac_addr > 0); i++) {
+	for (i = 0; (p[i].port_id != NET_MAT_PORT_ID_UNSPEC) ||
+	            (p[i].pci.bus > 0) || (p[i].mac_addr > 0); i++) {
 		port = nla_nest_start(nlbuf, NET_MAT_PORT);
 		if (!port)
 			return -EMSGSIZE;

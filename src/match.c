@@ -2068,6 +2068,7 @@ match_get_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 	uint32_t min = 0, max = 0;
 
 	memset(&port, 0, sizeof(port));
+	port.port_id = NET_MAT_PORT_ID_UNSPEC;
 
 	opterr = 0;
 	while (argc > 0) {
@@ -2258,6 +2259,7 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 
 	memset(&port, 0, sizeof(port));
 	port.vlan.def_priority = NET_MAT_PORT_T_DEF_PRI_UNSPEC;
+	port.port_id = NET_MAT_PORT_ID_UNSPEC;
 
 	opterr = 0;
 	while (argc > 0) {
@@ -2424,8 +2426,8 @@ match_set_port_send(int verbose, uint32_t pid, int family, uint32_t ifindex,
 		argc--; argv++;
 	}
 
-	if (!port.port_id) {
-		fprintf(stderr, "Error table id is required for update\n");
+	if (port.port_id == NET_MAT_PORT_ID_UNSPEC) {
+		fprintf(stderr, "Error port id is required\n");
 		set_port_usage();
 		exit(-1);
 	}

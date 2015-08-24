@@ -1509,7 +1509,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 		return -EOPNOTSUPP;
 	}
 
-	for (bmax = 0, i = 0; ports[i].port_id > 0; i++)
+	for (bmax = 0, i = 0; ports[i].port_id != NET_MAT_PORT_ID_UNSPEC; i++)
 		if (ports[i].port_id > bmax)
 			bmax = ports[i].port_id;
 
@@ -1540,7 +1540,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 
 	/* continue until the last port is processed */
 	TAILQ_INIT(&head);
-	for (i = 0; ports[i].port_id > 0; i++) {
+	for (i = 0; ports[i].port_id != NET_MAT_PORT_ID_UNSPEC; i++) {
 		/* allocate storage for nlbuf node */
 		node = malloc(sizeof(*node));
 		if (!node) {
@@ -1588,7 +1588,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 		if (!pnest)
 			return -EMSGSIZE;
 
-		for (; ports[i].port_id > 0; i++) {
+		for (; ports[i].port_id != NET_MAT_PORT_ID_UNSPEC; i++) {
 			if (ports[i].port_id > max ||
 			    ports[i].port_id < min)
 				continue;
@@ -1614,6 +1614,9 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 			nla_nest_end(nlbuf, port);
 		}
 		nla_nest_end(nlbuf, pnest);
+
+		if (ports[i].port_id == NET_MAT_PORT_ID_UNSPEC)
+			break;
 	}
 
 	return send_multipart_msg(nlh, &head, multipart);
@@ -1716,6 +1719,10 @@ static int match_cmd_get_port(struct nlmsghdr *nlh, uint8_t cmd)
 
 	if(!ports)
 		return -ENOMEM;
+
+	/* terminate ports array */
+	ports[count].port_id = NET_MAT_PORT_ID_UNSPEC;
+
 	rem = nla_len(tb[NET_MAT_PORTS]);
 	for (i = nla_data(tb[NET_MAT_PORTS]), count = 0;
 	     nla_ok(i, rem);
@@ -1761,7 +1768,7 @@ static int match_cmd_get_port(struct nlmsghdr *nlh, uint8_t cmd)
 
 	err = match_put_ports(nlbuf, ports);
 	if (err) {
-		MAT_LOG(ERR, "Warning failed to pack headers.\n");
+		MAT_LOG(ERR, "Warning failed to pack ports.\n");
 		goto nla_put_failure;
 	}
 	err = nl_send_auto(nsd, nlbuf);
