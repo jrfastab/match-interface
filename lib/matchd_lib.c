@@ -1865,16 +1865,23 @@ int matchd_rx_process(struct nlmsghdr *nlh)
 	struct genlmsghdr *glh = nlmsg_data(nlh);
 	int err;
 
-	if (nlh->nlmsg_type == NLMSG_ERROR)
-		return -EINVAL;	
+	if (nlh->nlmsg_type != family) {
+		err = -EINVAL;
+		goto out;
+	}
 
-	if (glh->cmd > NET_MAT_CMD_MAX)
-		return -EOPNOTSUPP;
+	if (glh->cmd > NET_MAT_CMD_MAX) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
 
-	if (type_cb[glh->cmd] == NULL)
-		return -EOPNOTSUPP;
+	if (type_cb[glh->cmd] == NULL) {
+		err = -EOPNOTSUPP;
+		goto out;
+	}
 
 	err = type_cb[glh->cmd](nlh);
+out:
 	return (err < 0) ? send_error(nlh, -err) : err;
 }
 
@@ -1898,6 +1905,11 @@ int matchd_init(struct nl_sock *sock, int family_id,
 #endif
 	nsd = sock;
 	family = family_id;
+
+	if (family < NLMSG_MIN_TYPE) {
+		MAT_LOG(ERR, "Error: invalid netlink family id\n");
+		return -EINVAL;
+	}
 
 	backend = match_backend_open(backend_name, init_arg);
 	if (!backend) {
