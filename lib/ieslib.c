@@ -55,6 +55,25 @@
 #define MATCH_NSH_PORT 4790
 #define MATCH_VXLAN_GPE_NSH_PROTO 4
 
+/* whether ies tagging is disabled on switch init for all host interfaces */
+#ifndef MATCH_DISABLE_IES_TAGGING
+#define MATCH_DISABLE_IES_TAGGING 1
+#endif
+
+#if MATCH_DISABLE_IES_TAGGING == 1
+
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <linux/sockios.h>
+#include <linux/ethtool.h>
+#include <ifaddrs.h>
+
+#define ETHTOOL_SPFLAGS 0x00000028
+#define ETHTOOL_PRV_FLAG_IES_DISABLE (0 << 0)
+
+#endif /* MATCH_DISABLE_IES_TAGGING == 1 */
+
 fm_semaphore seqSem;
 fm_int sw = FM_MAIN_SWITCH;
 
@@ -1142,6 +1161,46 @@ struct match_backend ies_pipeline_backend = {
 
 MATCH_BACKEND_REGISTER(ies_pipeline_backend)
 
+#if MATCH_DISABLE_IES_TAGGING == 1
+static void disable_ies_tagging(void)
+{
+	int sock = -1;
+	struct ifaddrs *addrs = NULL;
+	struct ifaddrs *a;
+	struct ethtool_value ev;
+	struct ifreq ifr;
+
+	memset(&ev, 0, sizeof(ev));
+	memset(&ifr, 0, sizeof(ifr));
+
+	sock = socket(PF_PACKET, SOCK_RAW, 0);
+	if (sock == -1)
+		goto out;
+
+	if (getifaddrs(&addrs) == -1)
+		goto out;
+
+	ev.cmd = ETHTOOL_SPFLAGS;
+	ev.data = ETHTOOL_PRV_FLAG_IES_DISABLE;
+	ifr.ifr_data = (void *)&ev;
+
+	for (a = addrs; a; a = a->ifa_next) {
+		if (a->ifa_addr->sa_family == AF_PACKET) {
+			strncpy(ifr.ifr_name, a->ifa_name, IF_NAMESIZE);
+			if (ioctl(sock, SIOCETHTOOL, &ifr) == 0)
+				MAT_LOG(DEBUG, "%s: ies_tagging disabled\n",
+				        ifr.ifr_name);
+		}
+	}
+
+out:
+	if (addrs)
+		freeifaddrs(addrs);
+	if (sock != -1)
+		close(sock);
+}
+#endif /* MATCH_DISABLE_IES_TAGGING == 1 */
+
 static void eventHandler(fm_int event, fm_int sw, void *ptr)
 {
 	fm_eventPort *portEvent = (fm_eventPort *) ptr;
@@ -1396,6 +1455,10 @@ int switch_init(int one_vlan)
 		return cleanup("fmSetPortAttribute", err);
 
 	MAT_LOG(DEBUG, "set pvid for  port %d to vlan %u\n", port, vlan);
+
+#if MATCH_DISABLE_IES_TAGGING == 1
+	disable_ies_tagging();
+#endif
 
 	MAT_LOG(DEBUG, "Switch is UP, all ports are now enabled\n");
 
