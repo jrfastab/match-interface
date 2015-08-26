@@ -35,7 +35,8 @@ int main(void)
 	struct net_mat_tbl *tables;
 	struct net_mat_port *ports;
 	uint32_t phys_port_id = 0;
-	uint32_t glort = 0;
+	uint32_t glort = 0, lport = 0;
+	uint8_t bus, device, function;
 	int err;
 
 	nsd = match_nl_get_socket();
@@ -165,22 +166,45 @@ int main(void)
 	printf("----------------------------------------\n");
 	printf("Ports:\n");
 	printf("----------------------------------------\n");
-	ports = match_nl_get_ports(nsd,pid, 0, family, min, max);
+	ports = match_nl_get_ports(nsd, pid, 0, family, min, max);
 	if (!ports) {
 		fprintf(stderr, "Error: get_ports failed\n");
 		return -EINVAL;
 	}
 	pp_ports(stdout, true, ports);
 	free(ports);
+	printf("\n");
 
-	err = match_nl_lport_to_phys_port(nsd, pid, 0, family, 4122,
-	                                  &phys_port_id, &glort);
+	printf("----------------------------------------\n");
+	printf("pci to Logical Port Map:\n");
+	printf("----------------------------------------\n");
+	bus = 6;
+	device = 0;
+	function = 0;
+
+	err = match_nl_pci_lport(nsd, pid, 0, family, bus, device, function,
+			&lport, &glort);
+
+	if (err) {
+		fprintf(stderr, "Error: match_nl_pci_lport failed\n");
+		return -EINVAL;
+	} else
+		printf("pci BUS:DEVICE.FUNCTION %02x:%02x.%d is logical port %d\n",
+				bus, device, function, lport);
+
+	printf("\n");
+
+	printf("----------------------------------------\n");
+	printf("Logical Port to Physical Port Map:\n");
+	printf("----------------------------------------\n");
+	err = match_nl_lport_to_phys_port(nsd, pid, 0, family, lport,
+			&phys_port_id, &glort);
 	if (err) {
 		fprintf(stderr, "Error: lport_to_phys_port failed\n");
 		return -EINVAL;
 	} else
-		printf("Logical Port %d is Physical Port %d\n",
-		        4122, phys_port_id);
+		printf("logical port %d is physical port %d\n", lport, phys_port_id);
+	printf("\n");
 
 	return 0;
 }
