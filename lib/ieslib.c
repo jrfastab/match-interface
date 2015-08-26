@@ -2049,6 +2049,9 @@ int switch_create_TCAM_table(__u32 table_id, struct net_mat_field_ref *matches, 
 			case HEADER_IPV4_PROTOCOL:
 				condition |= FM_FLOW_MATCH_PROTOCOL;
 				break;
+			case HEADER_IPV4_TOS:
+				condition |= FM_FLOW_MATCH_TOS;
+				break;
 			default:
 				MAT_LOG(ERR, "%s: match error in HEADER_IPV4, field=%d\n", __func__, matches[i].field);
 				err = -EINVAL;
@@ -2721,6 +2724,14 @@ int switch_add_TCAM_rule_entry(__u32 *flowid, __u32 table_id, __u32 priority, st
 				condVal.protocolMask = (fm_byte)matches[i].v.u8.mask_u8;
 #ifdef DEBUG
 				MAT_LOG(DEBUG, "%s: match PROTOCOL(0x%08x:0x%08x)\n", __func__, condVal.protocol, condVal.protocolMask);
+#endif /* DEBUG */
+				break;
+			case HEADER_IPV4_TOS:
+				cond |= FM_FLOW_MATCH_TOS;
+				condVal.tos = (fm_byte)matches[i].v.u8.value_u8;
+				condVal.tosMask = (fm_byte)matches[i].v.u8.mask_u8;
+#ifdef DEBUG
+                                MAT_LOG(DEBUG, "%s: match TOS(0x%08x:0x%08x)\n", __func__, condVal.tos, condVal.tosMask);
 #endif /* DEBUG */
 				break;
 			default:

@@ -60,8 +60,7 @@ static char vxlan_dst_mac_str[] = "vxlan_dst_mac";
 static char te_miss_dflt_port_str[] = "miss_default_port";
 static char version[] = "version";
 static char ihl[] = "ihl";
-static char dscp[] = "dscp";
-static char ecn[] = "ecn";
+static char tos[] = "tos";
 static char length[] = "length";
 static char ident[] = "identification";
 static char flags[] = "flags";
@@ -235,8 +234,7 @@ static struct net_mat_hdr vxlan = {
 enum ies_header_ipv4_ids {
 	HEADER_IPV4_VERSION = 1,
 	HEADER_IPV4_IHL,
-	HEADER_IPV4_DSCP,
-	HEADER_IPV4_ECN,
+	HEADER_IPV4_TOS,
 	HEADER_IPV4_LENGTH,
 	HEADER_IPV4_IDENTIFICATION,
 	HEADER_IPV4_FLAGS,
@@ -249,19 +247,16 @@ enum ies_header_ipv4_ids {
 	HEADER_IPV4_OPTIONS,
 };
 
-static struct net_mat_field ipv4_fields[14] = {
+static struct net_mat_field ipv4_fields[13] = {
 	{ .name = version,
 	  .uid = HEADER_IPV4_VERSION,
 	  .bitwidth = 4,},
 	{ .name = ihl,
 	  .uid = HEADER_IPV4_IHL,
 	  .bitwidth = 4,},
-	{ .name = dscp,
-	  .uid = HEADER_IPV4_DSCP,
-	  .bitwidth = 6,},
-	{ .name = ecn,
-	  .uid = HEADER_IPV4_ECN,
-	  .bitwidth = 2,},
+	{ .name = tos,
+	  .uid = HEADER_IPV4_TOS,
+	  .bitwidth = 8,},
 	{ .name = length,
 	  .uid = HEADER_IPV4_LENGTH,
 	  .bitwidth = 8,},
@@ -1076,19 +1071,14 @@ static struct net_mat_field_ref matches_tcam[] = {
 
 	{ .instance = HEADER_INSTANCE_IPV4,
 	  .header = HEADER_IPV4,
-	  .field = HEADER_IPV4_DSCP,
-	  .mask_type = NET_MAT_MASK_TYPE_MASK},
-
-	{ .instance = HEADER_INSTANCE_IPV4,
-	  .header = HEADER_IPV4,
-	  .field = HEADER_IPV4_ECN,
-	  .mask_type = NET_MAT_MASK_TYPE_MASK},
-
-	{ .instance = HEADER_INSTANCE_IPV4,
-	  .header = HEADER_IPV4,
 	  .field = HEADER_IPV4_TTL,
 	  .mask_type = NET_MAT_MASK_TYPE_MASK},
-#endif /* NOT_IMPLEMENTED */
+#endif /* NOT IMPLEMENTED */
+
+	{ .instance = HEADER_INSTANCE_IPV4,
+	  .header = HEADER_IPV4,
+	  .field = HEADER_IPV4_TOS,
+	  .mask_type = NET_MAT_MASK_TYPE_MASK},
 
 	{ .instance = HEADER_INSTANCE_IPV4,
 	  .header = HEADER_IPV4,
