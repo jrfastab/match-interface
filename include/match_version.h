@@ -59,7 +59,7 @@
  * formulate a complete version number. The version number will be higher
  * for more recent versions.
  */
-#define MATCH_VER_EXTRA  1
+#define MATCH_VER_EXTRA  2
 
 /*
  * SUFFIX can be
