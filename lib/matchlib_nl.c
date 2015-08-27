@@ -1064,10 +1064,11 @@ int match_nl_pci_lport(struct nl_sock *nsd, uint32_t pid,
 	struct net_mat_port ports[2] = {{0}, {0}};
 	int err;
 
-	port.pci.bus = bus;
-	port.pci.device = device;
-	port.pci.function = function;
-	ports[0] = port;
+	ports[0] = ports[1] = port;
+
+	ports[0].pci.bus = bus;
+	ports[0].pci.device = device;
+	ports[0].pci.function = function;
 
 	err = match_nl_get_port(nsd, pid, ifindex, family,
 			NET_MAT_PORT_CMD_GET_LPORT, ports, lport, glort);
@@ -1086,8 +1087,9 @@ int match_nl_mac_lport(struct nl_sock *nsd, uint32_t pid,
 	struct net_mat_port ports[2] = {{0}, {0}};
 	int err;
 
-	port.mac_addr = mac;
-	ports[0] = port;
+	ports[0] = ports[1] = port;
+
+	ports[0].mac_addr = mac;
 
 	err = match_nl_get_port(nsd, pid, ifindex, family,
 			NET_MAT_PORT_CMD_GET_LPORT, ports, lport, glort);
@@ -1106,8 +1108,9 @@ int match_nl_lport_to_phys_port(struct nl_sock *nsd, uint32_t pid,
 	struct net_mat_port ports[2] = {{0}, {0}};
 	int err;
 
-	port.port_id = lport;
-	ports[0] = port;
+	ports[0] = ports[1] = port;
+
+	ports[0].port_id = lport;
 
 	err = match_nl_get_port(nsd, pid, ifindex, family,
 			NET_MAT_PORT_CMD_GET_PHYS_PORT,
