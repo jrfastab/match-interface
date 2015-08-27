@@ -2223,14 +2223,14 @@ static int match_put_action_args(struct nl_msg *nlbuf,
 
 		if (args[i].name &&
 		    nla_put_string(nlbuf, NET_MAT_ACTION_ARG_NAME, args[i].name)) {
-			MAT_LOG(ERR, "Warning nla_put error, abort\n");
+			nla_nest_cancel(nlbuf, arg);
 			return -EMSGSIZE;
 		}
 
 		if (nla_put_u32(nlbuf,
 				NET_MAT_ACTION_ARG_TYPE,
 				args[i].type)) {
-			MAT_LOG(ERR, "Warning nla_put error, abort\n");
+			nla_nest_cancel(nlbuf, arg);
 			return -EMSGSIZE;
 		}
 
@@ -2263,7 +2263,7 @@ static int match_put_action_args(struct nl_msg *nlbuf,
 		}
 
 		if (err) {
-			MAT_LOG(ERR, "Warning nla_put error, abort\n");
+			nla_nest_cancel(nlbuf, arg);
 			return -EMSGSIZE;
 		}
 
@@ -2490,7 +2490,7 @@ int match_put_rule(struct nl_msg *nlbuf, struct net_mat_rule *ref)
 	return 0;
 
 nla_put_failure:
-	MAT_LOG(ERR, "Warning nla_put error, abort\n");
+	nla_nest_cancel(nlbuf, rule);
 	return -EMSGSIZE;
 }
 
@@ -2702,7 +2702,7 @@ static int net_mat_put_header_node(struct nl_msg *nlbuf,
 	for (i = 0; node->hdrs[i]; i++) {
 		if (nla_put_u32(nlbuf, NET_MAT_HEADER_NODE_HDRS_VALUE,
 				node->hdrs[i])) {
-			MAT_LOG(ERR, "Warning nla_put error, abort\n");
+			nla_nest_cancel(nlbuf, hdrs);
 			return -EMSGSIZE;
 		}
 	}

@@ -336,9 +336,8 @@ static int match_cmd_get_tables(struct nlmsghdr *nlh)
 				nlh_multi = nlmsg_hdr(nlbuf);
 				nlh_multi->nlmsg_flags |= NLM_F_MULTI;
 				multipart = true;
-				MAT_LOG(ERR, "Warning nla_put error, abort\n");
-				free_multipart_msg(&head);
-				goto nla_put_failure;
+				nla_nest_cancel(nlbuf, t);
+				break;
 			}
 			nla_nest_end(nlbuf, t);
 		}
@@ -429,7 +428,7 @@ static int match_cmd_get_actions(struct nlmsghdr *nlh)
 	for (i = 0; backend->actions[i] && backend->actions[i]->uid; i++) {
 		err = match_put_action(nlbuf, backend->actions[i]);
 		if (err) {
-			MAT_LOG(ERR, "Warning nla_put error, abort\n");
+			nla_nest_cancel(nlbuf, actions);
 			goto nla_put_failure;
 		}
 	}
