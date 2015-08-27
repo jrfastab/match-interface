@@ -77,6 +77,8 @@ struct net_mat_rule *matchd_mock_tables[MAX_MOCK_TABLES + 1];
 struct net_mat_tbl my_dyn_table_list[MAX_MOCK_TABLES];
 #endif
 
+#define MATCH_NLMSG_DEFAULT_SIZE 8192
+
 /* The family id can be learned either via a kernel query or by
  * specifying the id on the command line.
  */
@@ -1909,6 +1911,8 @@ int matchd_init(struct nl_sock *sock, int family_id,
 		MAT_LOG(ERR, "Error: invalid netlink family id\n");
 		return -EINVAL;
 	}
+
+	nlmsg_set_default_size(MATCH_NLMSG_DEFAULT_SIZE);
 
 	backend = match_backend_open(backend_name, init_arg);
 	if (!backend) {
