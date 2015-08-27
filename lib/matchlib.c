@@ -1599,6 +1599,9 @@ int match_get_rules(FILE *fp, int print, struct nlattr *attr,
 	     nla_ok(i, rem); i = nla_next(i, &rem), count++) {
 		struct nlattr *rule[NET_MAT_ATTR_MAX+1];
 
+		matches = NULL;
+		actions = NULL;
+
 		err = nla_parse_nested(rule, NET_MAT_ATTR_MAX, i,
 				       match_table_rule_policy);
 		if (err) {
