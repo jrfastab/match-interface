@@ -138,4 +138,8 @@ char *action_names(unsigned int uid);
 unsigned int gen_table_id(void);
 unsigned int get_table_id(char *name);
 
+#if HAVE_NLA_NEST_CANCEL == 0
+void nla_nest_cancel(struct nl_msg *msg, const struct nlattr *attr);
+#endif
+
 #endif /* _MATCHLIB_H */

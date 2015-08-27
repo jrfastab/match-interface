@@ -2874,3 +2874,23 @@ int match_put_ports(struct nl_msg *nlbuf,
 	nla_nest_end(nlbuf, ports);
 	return 0;
 }
+
+#if HAVE_NLA_NEST_CANCEL == 0
+void nla_nest_cancel(struct nl_msg *msg, const struct nlattr *attr)
+{
+	const struct nlmsghdr *msghdr = nlmsg_hdr(msg);
+	uint32_t *len;
+	ssize_t del;
+
+	/* length is the first field in nlmsghdr */
+	len = (uint32_t *)(uintptr_t)msghdr;
+
+	del = (char *)nlmsg_tail(msghdr) - (const char *)attr;
+	if (del < 0)
+		MAT_LOG(EMERG, "Error: %s() invalid nest\n", __func__);
+	else {
+		*len -= (uint32_t)del;
+		memset(nlmsg_tail(msghdr), 0, (size_t)del);
+	}
+}
+#endif /* HAVE_NLA_NEST_CANCEL == 0 */
