@@ -519,9 +519,15 @@ static void ies_get_pkt_stats(struct net_mat_port_stats *s, fm_portCounters *c)
 			c->cntRxBcstPkts +
 			c->cntRxMcstPkts;
 
+	s->rx_bytes = c->cntRxOctetsNonIp +
+	              c->cntRxOctetsIPv4 +
+	              c->cntRxOctetsIPv6;
+
 	s->tx_packets = c->cntTxUcstPkts +
 			c->cntTxBcstPkts +
 			c->cntTxMcstPkts;
+
+	s->tx_bytes = c->cntTxOctets;
 }
 
 static int ies_ports_get(struct net_mat_port **ports)

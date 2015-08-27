@@ -803,7 +803,9 @@ static void pp_port_stats(FILE *fp, int print, struct net_mat_port_stats *s)
 {
 	pfprintf(fp, print, "    stats:\n");
 	pfprintf(fp, print, "        rx_packets %" PRIu64 "\n", s->rx_packets);
+	pfprintf(fp, print, "        rx_bytes   %" PRIu64 "\n", s->rx_bytes);
 	pfprintf(fp, print, "        tx_packets %" PRIu64 "\n", s->tx_packets);
+	pfprintf(fp, print, "        tx_bytes   %" PRIu64 "\n", s->tx_bytes);
 }
 
 static void pp_port_vlan(FILE *fp, int print, struct net_mat_port_vlan *v)
