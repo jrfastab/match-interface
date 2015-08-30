@@ -30,7 +30,7 @@ WARNING_FLAGS_GCC = -pedantic -Wall -Wextra -Wwrite-strings -Wformat=2 \
                     -Wold-style-definition
 
 AM_CFLAGS = -std=c99 -O2 -D_GNU_SOURCE -Werror $(WARNING_FLAGS_GCC) \
-            $(LIBNL_CFLAGS) $(LIBGVC_CFLAGS) -I$(abs_top_srcdir) \
+            $(LIBNL_CFLAGS) $(LIBGVC_CFLAGS) -lrt -I$(abs_top_srcdir) \
             -I$(abs_top_srcdir)/include
 CFLAGS += $(EXTRA_CFLAGS)
 
