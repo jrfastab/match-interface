@@ -3,7 +3,7 @@
 The Match interface currently requires the following three components
 to be installed.
 
-* Intel(R) Ethernet Switch (IES) Host Interface Driver [link](TBD)
+* Intel(R) Ethernet Switch (IES) Host Interface Driver [link](http://sourceforge.net/projects/e1000/files/unsupported/fm10k%20unsupported/)
 * Intel(R) Ethernet Switch (IES) Software [link](https://github.com/match-interface/IES)
 * Match interface [link](https://github.com/match-interface/match)
 
@@ -27,9 +27,9 @@ yum install wget git kernel-devel gcc autoconf automake \
 ### Host Interface Driver
 
 ```
-wget <TBD>.tar.gz
-tar -xzf <TBD>.tar.gz
-cd <TBD>/src
+wget http://sourceforge.net/projects/e1000/files/unsupported/fm10k%20unsupported/fm10k-next_0.18.1.tar.gz/download -O fm10k-next_0.18.1.tar.gz
+tar -xzf fm10k-next_0.18.1.tar.gz
+cd fm10k-next_0.18.1/src
 make
 make install
 cd ../..
@@ -96,4 +96,29 @@ systemctl start matchd.service
 
 ```
 systemctl stop matchd.service
+```
+
+### Changing platform configuration files
+
+By default, the configuration file for the sdi_adapter_100g_br network
+adapter is used.  If a different network adapter is used the default
+configuration file must be changed.
+
+To change the default to the sdi_adapter_25g_ac configuration file, follow
+the steps below.
+
+```
+cd /etc/ies/platforms/
+rm -f default
+ln -sf sdi_adapter_25g_ac default
+systemctl start matchd.service
+```
+
+### Startup errors
+
+When using the sdv_100g_rr network adapter, the following line must
+be added to the sdv_100g_rr/fm_platform_attributes.cfg file.
+
+```
+api.platform.config.switch.0.uioDevName text /dev/uio0
 ```

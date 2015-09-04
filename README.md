@@ -10,6 +10,11 @@ tables and ports in the pipeline.
 Refer to the instructions in the [installation guide](https://github.com/match-interface/match/blob/master/INSTALL.md)
 to quickly start using the Match interface.
 
+# Tutorial
+
+Example tutorials can be found in the [tutorial](https://github.com/match-interface/match/blob/master/doc/tutorial)
+section.
+
 # Software Overview
 
 The Match interface software consists primarily of two components.
@@ -33,7 +38,7 @@ the Match CLI man page.
 man match
 ```
 
-Or for specific commands.
+Or for specific commands, e.g. set_rule
 
 ```
 man match set_rule
