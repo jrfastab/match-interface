@@ -59,7 +59,7 @@
  * formulate a complete version number. The version number will be higher
  * for more recent versions.
  */
-#define MATCH_VER_EXTRA  3
+#define MATCH_VER_EXTRA  15
 
 /*
  * SUFFIX can be
@@ -67,7 +67,7 @@
  *   ""     - for released versions
  *   "rc"  - for release candidates
  */
-#define MATCH_VER_SUFFIX "rc"
+#define MATCH_VER_SUFFIX ""
 
 #define MATCH_VER_NUM(a,b,c,d) ((a) << 24 | (b) << 16 | (c) << 8 | (d))
 
@@ -89,7 +89,7 @@ static inline const char *match_version(void)
 		         MATCH_VER_MAJOR,
 		         MATCH_VER_MINOR,
 		         MATCH_VER_LEVEL);
-	else if (!strcmp(MATCH_VER_SUFFIX, "-dev"))
+	else if (!strcmp(MATCH_VER_SUFFIX, "dev"))
 		snprintf(s, sizeof(s), "%d.%d.%d%s",
 		         MATCH_VER_MAJOR,
 		         MATCH_VER_MINOR,
