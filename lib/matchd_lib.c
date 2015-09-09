@@ -1541,7 +1541,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 
 	/* continue until the last port is processed */
 	TAILQ_INIT(&head);
-	for (i = 0; ports[i].port_id != NET_MAT_PORT_ID_UNSPEC; i++) {
+	for (i = 0; ports[i].port_id != NET_MAT_PORT_ID_UNSPEC;) {
 		/* allocate storage for nlbuf node */
 		node = malloc(sizeof(*node));
 		if (!node) {
@@ -1608,8 +1608,7 @@ static int match_cmd_get_ports(struct nlmsghdr *nlh)
 				nlh_multi = nlmsg_hdr(nlbuf);
 				nlh_multi->nlmsg_flags |= NLM_F_MULTI;
 				multipart = true;
-				min = i;
-				nla_nest_end(nlbuf, port);
+				nla_nest_cancel(nlbuf, port);
 				break;
 			}
 			nla_nest_end(nlbuf, port);
