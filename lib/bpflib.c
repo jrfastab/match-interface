@@ -108,8 +108,23 @@ static inline int bpf_map_update_elem(__u32 fd, void *key, void *value)
 
 	return syscall(__NR_bpf, BPF_MAP_UPDATE_ELEM, &attr, sizeof(attr));
 }
+
+static inline int bpf_map_delete_elem(__u32 fd, void *key)
+{
+	union bpf_attr attr = {.map_type = 0}; /* initialize to zero */
+
+	attr.map_fd = fd;
+	attr.key = bpf_ptr_to_u64(key);
+
+	return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
+}
 #else
 static inline int bpf_map_update_elem(__u32 fd __unused, void *key __unused, void *value __unused)
+{
+	return 0;
+}
+
+static inline int bpf_map_delete_elem(__u32 fd __unused, void *key __unused)
 {
 	return 0;
 }
@@ -119,7 +134,7 @@ static inline int bpf_map_update_elem(__u32 fd __unused, void *key __unused, voi
  * data structure. This allows reads to avoid going to kernel via
  * syscalls to rebuild the rules. Trading memory for ease of use here.
  */
-char *table_cache[BPF_MATCH_MAX_TABLES];
+__u8 *table_cache[BPF_MATCH_MAX_TABLES];
 struct bpf_elf_map table_aux[BPF_MATCH_MAX_TABLES];
 int table_fds[BPF_MATCH_MAX_TABLES];
 
@@ -218,7 +233,7 @@ static int bpf_pipeline_open(void *arg __unused)
 				 * the user sort the mess out.
 				 */
 				assert(aux.ent[i].id < BPF_MATCH_MAX_TABLES);
-				table_cache[index] = calloc(aux.ent[i].max_elem, aux.ent[i].size_value);
+				table_cache[index] = calloc(aux.ent[i].max_elem, aux.ent[i].size_key);
 				table_aux[index] = aux.ent[i];
 				table_fds[index] = fds[i];
 				break;
@@ -250,11 +265,6 @@ static void bpf_pipeline_get_rule_counters(struct net_mat_rule *rule __unused)
 {
 	MAT_LOG(ERR, "bpf get_counters unsupported\n");
 	return;
-}
-
-static int bpf_pipeline_del_rules(struct net_mat_rule *rule __unused)
-{
-	return -EOPNOTSUPP; 
 }
 
 static struct net_mat_tbl *bpf_get_table(__u32 table)
@@ -328,17 +338,14 @@ static int bpf_match_to_key(__u32 table,
 
 		switch (ref->type) {
 		case NET_MAT_FIELD_REF_ATTR_TYPE_U8:
-			ref->v.u8.value_u8 <<= (8 - bitdiff);
 			memcpy(&key[offset], &ref->v.u8.value_u8, sizeof(__u8));
 			offset+=1;
 			break;
 		case NET_MAT_FIELD_REF_ATTR_TYPE_U16:
-			ref->v.u16.value_u16 <<= (16 - bitdiff);
 			memcpy(&key[offset], &ref->v.u16.value_u16, sizeof(__u16));
 			offset+=2;
 			break;
 		case NET_MAT_FIELD_REF_ATTR_TYPE_U32:
-			ref->v.u32.value_u32 <<= (32 - bitdiff);
 			memcpy(&key[offset], &ref->v.u32.value_u32, sizeof(__u32));
 			offset+=4;
 			break;
@@ -349,11 +356,6 @@ static int bpf_match_to_key(__u32 table,
 			break;
 		}
 	}
-
-	printf("%s: using key: ", __func__);
-	for (i = 0; i < offset; i++)
-		printf("%02x\n", key[i]);
-	printf("\n");
 
 	return 0;
 }
@@ -412,10 +414,11 @@ static int bpf_match_to_value(struct net_mat_action *actions, __u8 *value)
 	return 0;
 }
 
-static int bpf_pipeline_set_rules(struct net_mat_rule *rule __unused)
+static int bpf_pipeline_setdel_rules(struct net_mat_rule *rule, bool set_rule)
 {
-	__u8 *key, *value;
+	__u8 *key, *value, *tcache;
 	int err;
+	unsigned int i;
 
 	/* Assert on these because we expect matchlib should never pass us
 	 * ill-formed rules. Added assert in the interim because I'm using
@@ -430,7 +433,7 @@ static int bpf_pipeline_set_rules(struct net_mat_rule *rule __unused)
 	 *
 	 * Should middle layer catch this?
 	 */
-	printf("%s: rule %i max %i\n", __func__, rule->uid, table_aux[rule->table_id].max_elem);
+	printf("%s: rule %i max %i set:%s\n", __func__, rule->uid, table_aux[rule->table_id].max_elem, set_rule ? "yes" : "no");
 	assert(rule->uid < table_aux[rule->table_id].max_elem);
 	/*
 	if (uid  > table_aux[rule.table_id].max_elem) {
@@ -443,47 +446,61 @@ static int bpf_pipeline_set_rules(struct net_mat_rule *rule __unused)
 	if (!key)
 		return -ENOMEM;
 
-	value = calloc(1, table_aux[rule->table_id].size_value);
-	if (!value) {
-		free(key);
-		return -ENOMEM;
+	tcache = table_cache[rule->table_id];
+
+	/* deleting a rule is just an update with a zero'd value
+	 * so we only setup 'value' on set_rules.
+	 */ 
+	if (set_rule) {
+		value = calloc(1, table_aux[rule->table_id].size_value);
+		if (!value) {
+			free(key);
+			return -ENOMEM;
+		}
+
+		err = bpf_match_to_key(rule->table_id, rule->matches, key);
+		if (err)
+			return err;
+
+		err = bpf_match_to_value(rule->actions, value);
+		if (err)
+			return err;
+
+		bpf_map_update_elem((__u32)table_fds[rule->table_id],
+				    (__u8 *) key,
+				    value);
+
+		memcpy(&tcache[rule->uid], key, table_aux[rule->table_id].size_key);
+	} else {
+		key = (__u8 *)&tcache[rule->uid];
+
+		bpf_map_delete_elem((__u32)table_fds[rule->table_id],
+				    (__u8 *) key);
 	}
 
-	err = bpf_match_to_key(rule->table_id, rule->matches, key);
-	if (err)
-		return err;
+	printf("%s: using key: ", __func__);
+	for (i = 0; i < table_aux[rule->table_id].size_key; i++)
+		printf("%02x\n", key[i]);
+	printf("\n");
 
-	err = bpf_match_to_value(rule->actions, value);
-	if (err)
-		return err;
-
-	bpf_map_update_elem((__u32)table_fds[rule->table_id],
-			    (__u8 *) key,
-			    value);
+	if (!set_rule)
+		memset(&tcache[rule->uid], 0, table_aux[rule->table_id].size_key);
 
 	return 0;
 }
 
+static int bpf_pipeline_del_rules(struct net_mat_rule *rule)
+{
+	return bpf_pipeline_setdel_rules(rule, false);
+}
+
+static int bpf_pipeline_set_rules(struct net_mat_rule *rule)
+{
+	return bpf_pipeline_setdel_rules(rule, true);
+}
+
 static int bpf_pipeline_create_table(struct net_mat_tbl *tbl __unused)
 {
-#if 0
-        static char buf[4096];
-        ssize_t sz;
-        int trace_fd;
-
-        trace_fd = open(DEBUGFS "trace_pipe", O_RDONLY, 0);
-        if (trace_fd < 0)
-                return -EINVAL;
-       
-	sz = read(trace_fd, buf, sizeof(buf));
-	if (sz > 0) {
-		buf[sz] = 0;
-		puts(buf);
-	}
-
-	printf("buf: %s\n", buf);
-#endif
-
 	return -EINVAL;
 }
 
